@@ -1,0 +1,63 @@
+\section{Implementation Decisions and Trade-offs}
+
+\subsection{Connection reuse vs. a fresh connection per packet}
+
+The HTTP/2 generator opens one \texttt{httpx} client with HTTP/2 enabled and
+keeps it open for the whole run, firing several requests at once over that
+single connection to actually use multiplexing rather than just claiming to.
+The QUIC generator does the same thing for the same reason: a QUIC handshake
+costs at least one extra round trip, and if the generator reconnected for
+every request that handshake cost would swamp the latency numbers and make
+QUIC look artificially slow next to HTTP/2 and MQTT, both of which also keep a
+connection open.
+
+The TCP/UDP generator does the opposite on purpose. For every single TCP
+packet it opens a new connection, sends, and closes it again. This was not an
+oversight. A fresh connect/close cycle produces a real SYN, SYN-ACK and FIN
+sequence in the capture, which is exactly what is needed later for the
+Failure Visibility analysis and for telling raw TCP apart from the
+application-level protocols in a protocol hierarchy view.
+
+\subsection{Mode and pattern as two separate knobs}
+
+The TCP/UDP generator splits "what does a packet look like" from "how is it
+paced over time". \texttt{mode} controls size and base interval: normal mode
+uses a fixed 512 bytes every 100 ms, stealth mode draws a random size between
+64 and 1400 bytes with Poisson-distributed timing. \texttt{pattern}
+independently controls the sending cadence on top of that: constant, periodic
+burst, or an extra random gap. Keeping these two orthogonal made it possible
+to test, for example, stealth-mode sizing combined with a burst cadence, which
+would not have been possible if mode and pattern were the same setting.
+
+\subsection{The Poisson pattern on every protocol, not just one}
+
+The assignment only asks for a random, Poisson-distributed pattern somewhere
+in the system. This implementation puts it on all four generators using
+\texttt{random.expovariate(1/interval)} (or NumPy's exponential distribution
+for the TCP/UDP generator), which produces exponentially distributed gaps
+between sends with the same average rate as the constant pattern. The reason
+to extend it everywhere was to be able to show one single Wireshark capture
+where HTTP/2, QUIC and MQTT all use Poisson timing at once, alongside TCP/UDP
+stealth mode, rather than only ever demonstrating it on one protocol.
+
+\subsection{Warmup and cooldown double as the ramp pattern}
+
+Rather than building a separate "ramp" mode per protocol, the warmup and
+cooldown periods are handled once, centrally, in the controller. A function
+called \texttt{\_ramp\_rates()} steps every generator's rate field linearly
+from zero up to its configured target over the warmup window, and back down
+to zero over the cooldown window, sending the new value through the normal
+PATCH endpoint at each step. This single mechanism satisfies both
+requirements at once: the warmup/cooldown behavior the assignment asks for,
+and the "ramping" sending pattern, since the gradual change shows up as a
+slope in a Wireshark I/O graph either way.
+
+\subsection{Adaptive Control}
+
+The controller can run an autonomous control loop, either because a YAML
+phase turns it on or because it was switched on manually. Every few seconds it
+checks each generator's error rate, and where reported its latency, against
+configurable thresholds, and scales the rate up or down by a multiplier
+bounded on both ends. This goes past the baseline requirements, but it ties
+directly into the resilience patterns covered in the course: the system reacts
+to an injected failure on its own, without anyone touching a slider.
