@@ -1,93 +1,279 @@
-# Multi-Protocol Traffic Generation and Analysis
+# MIC Final Project: Multi-Protocol Traffic Generation and Analysis
 
+**Hochschule Rhein-Waal · Mobile & Internet Computing · SS2026**
 
+---
 
-## Getting started
+## What this project does
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+This system simulates a realistic enterprise network by generating concurrent traffic across five protocols (HTTP/2, QUIC/HTTP/3, MQTT, TCP, and UDP), all from orchestrated Docker containers. A central controller reads a YAML configuration file and steers all generators in real time. A web dashboard lets you watch and control everything live.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+The system also includes a **Stealth Mode** for the TCP/UDP generator: instead of fixed packet sizes and intervals, it uses randomized sizes and Poisson-distributed timing so the traffic is statistically indistinguishable from real user activity, directly demonstrating **Behavioral Fingerprinting** (Analysis Task 3).
 
-## Add your files
+Beyond the baseline requirements, the controller also implements: global **warmup/cooldown ramps** (rates linearly ramp from/to 0, visible as slopes in Wireshark I/O graphs), a **Random/Poisson sending pattern** on all 4 generators (not just TCP/UDP) for Temporal Analysis, **Fault Injection** (`fault_rate`, `extra_latency_ms` per protocol) for resilience demos, and an autonomous **Adaptive Control** loop that scales each generator's rate up or down based on its observed error rate and latency, with no manual intervention. All of this is controllable live from the dashboard.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+---
+
+## Quick Start
+
+```bash
+git clone <repo>
+cd mic-final-project
+
+# Build and start everything
+docker-compose build
+docker-compose up
+
+# Dashboard: http://localhost:3000
+# Controller API: http://localhost:8000
+# Metrics: http://localhost:9090/metrics
+```
+
+> **Needs**: Docker Desktop, `docker-compose` v2+. No other local dependencies.
+
+---
+
+## System Architecture
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.hsrw.eu/30078/multi-protocol-traffic-generation-and-analysis.git
-git branch -M main
-git push -uf origin main
+┌─────────────────────────────────────────────────────────────────────┐
+│                         docker-compose.yml                          │
+│                          Network: mic-net                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+│   CONTROLLER  │       │   DASHBOARD   │       │   MOSQUITTO   │
+│   :8000 REST  │       │   :3000 Web   │       │   :1883 MQTT  │
+│               │◄──────│               │       │               │
+│ Reads YAML    │       │ Minimalist UI │       │ MQTT Broker   │
+│ Coordinates   │       │ for the demo  │       │               │
+└───────┬───────┘       └───────────────┘       └───────┬───────┘
+        │                                               │
+        │  starts / stops / configures                  │
+        │                                               │
+┌───────┴──────────────────────────────────────┐        │
+│                   Generators                 │        │
+│                                              │        │
+│  ┌──────────────┐   ┌──────────────┐         │        │
+│  │  HTTP/2 Gen  │   │  QUIC Gen    │         │        │
+│  │  (httpx)     │   │  (aioquic)   │         │        │
+│  └──────┬───────┘   └──────┬───────┘         │        │
+│         │                 │                  │        │
+│  ┌──────┴───────┐   ┌──────┴───────┐         │        │
+│  │  MQTT Gen    │   │  TCP/UDP Gen │         │        │
+│  │  (paho-mqtt) │   │  Normal Mode │◄──────  │        │
+│  └──────┬───────┘   │  Stealth Mode│ YAML    │        │
+│         │           └──────────────┘         │        │
+└─────────┼────────────────────────────────────┘        │
+          └─────────────────────────────────────────────┘
+                                │
+       ┌────────────────────────┼────────────────────────┐
+       │                        │                        │
+       ▼                        ▼                        ▼
+┌──────────────┐        ┌──────────────┐        ┌──────────────┐
+│ HTTP/2 Server│        │ QUIC Server  │        │   METRICS    │
+│ Hypercorn +  │        │ (aioquic)    │        │  COLLECTOR   │
+│ FastAPI :8080│        │ :4433 UDP    │        │  :9090/metrics│
+└──────────────┘        └──────────────┘        └──────────────┘
 ```
 
-## Integrate with your tools
+---
 
-* [Set up project integrations](https://gitlab.hsrw.eu/30078/multi-protocol-traffic-generation-and-analysis/-/settings/integrations)
+## Container Overview
 
-## Collaborate with your team
+| Container | Image | Port | Role |
+|---|---|---|---|
+| `controller` | Python + FastAPI | 8000 | Reads YAML, controls generators, REST API |
+| `dashboard` | Static HTML/JS served via Python `http.server` | 3000 | Live dashboard for the demo |
+| `gen-http2` | Python + httpx | - | HTTP/2 GET/POST to `target-http2` |
+| `gen-quic` | Python + aioquic | - | QUIC/HTTP/3 requests to `target-quic` |
+| `gen-mqtt` | Python + paho-mqtt | - | MQTT publish/subscribe via Mosquitto |
+| `gen-tcpudp` | Python (raw `socket`s, TCP + UDP) | - | Raw TCP/UDP, normal + stealth mode, constant/periodic-burst/random patterns |
+| `target-http2` | Hypercorn + FastAPI | 8080 | HTTP/2 server |
+| `target-quic` | aioquic | 4433 | QUIC server |
+| `mosquitto` | Eclipse Mosquitto | 1883 | MQTT broker |
+| `metrics` | Python + Flask | 9090 | Aggregates stats from all generators |
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+---
 
-## Test and Deploy
+## Directory Structure
 
-Use the built-in continuous integration in GitLab.
+```
+mic-final-project/
+├── README.md                        ← you are here
+├── docker-compose.yml               ← starts everything (single machine)
+├── docker-compose.generators.yml    ← Machine A: controller + dashboard + generators (multi-machine)
+├── docker-compose.targets.yml       ← Machine B: targets + broker + metrics (multi-machine)
+├── .env.example                     ← copy to .env on Machine A, set TARGET_B_IP
+│
+├── config/
+│   ├── http2_heavy.yaml             ← Profile 1: HTTP/2 dominant
+│   ├── mqtt_heavy.yaml              ← Profile 2: MQTT dominant
+│   ├── balanced.yaml                ← Profile 3: balanced
+│   └── mosquitto.conf               ← MQTT broker configuration
+│
+├── controller/
+│   ├── Dockerfile
+│   ├── main.py                      ← FastAPI REST API
+│   └── requirements.txt
+│
+├── generators/
+│   ├── http2/
+│   │   ├── Dockerfile
+│   │   └── generator.py
+│   ├── quic/
+│   │   ├── Dockerfile
+│   │   └── generator.py
+│   ├── mqtt/
+│   │   ├── Dockerfile
+│   │   └── generator.py
+│   └── tcpudp/
+│       ├── Dockerfile
+│       └── generator.py             ← Normal + Stealth Mode
+│
+├── targets/
+│   ├── http2_server/
+│   │   ├── Dockerfile
+│   │   └── server.py
+│   └── quic_server/
+│       ├── Dockerfile
+│       └── server.py
+│
+├── metrics/
+│   ├── Dockerfile
+│   └── collector.py
+│
+├── dashboard/
+│   ├── Dockerfile                   ← serves index.html via `python -m http.server`
+│   └── index.html                   ← single-file dashboard (HTML + CSS + vanilla JS)
+│
+├── docs/
+│   ├── ARCHITECTURE.md              ← Detailed architecture explanation
+│   ├── WIRESHARK_GUIDE.md           ← Step-by-step capture guide
+│   ├── STEALTH_MODE.md              ← Traffic obfuscation, the key feature
+│   ├── DEMO_SCRIPT.md               ← 15-20 min demo script
+│   └── api/
+│       ├── swagger.html             ← combined Swagger UI for all 5 services
+│       └── openapi_*.json           ← generated OpenAPI specs (regenerate after API changes)
+│
+└── captures/                        ← NOT YET CREATED — see "Wireshark Captures" below
+    ├── 01_protocol_distribution.pcapng
+    ├── 02_temporal_analysis.pcapng
+    ├── 03_behavioral_fingerprinting.pcapng
+    ├── 04_failure_visibility.pcapng
+    └── 05_multi_machine.pcapng
+```
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+---
 
-***
+## Configuration Profiles
 
-# Editing this README
+The system reads YAML configurations from `config/`. At least 3 profiles are provided:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+# Switch profile while the system is running:
+curl -X POST http://localhost:8000/config/load \
+  -H "Content-Type: application/json" \
+  -d '{"profile": "mqtt_heavy"}'
+```
 
-## Suggestions for a good README
+See [`config/`](config/) for all profiles and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full configuration schema.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+---
 
-## Name
-Choose a self-explaining name for your project.
+## Controller REST API
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/start?profile=<name>` | Loads a YAML profile and starts the full phase/warmup/cooldown run |
+| `POST` | `/stop` | Stops the phase runner, Adaptive Control, and all generators |
+| `POST` | `/config/load` | Sets the active profile (applies phase 1 immediately if running) |
+| `PATCH` | `/generator/{name}` | Forwards arbitrary key/value overrides to one generator (e.g. `{"rate": 80}`) |
+| `POST` | `/generator/{name}/start` | Starts a single generator without affecting the others |
+| `POST` | `/generator/{name}/stop` | Stops a single generator without affecting the others |
+| `GET` | `/status` | Full system status: running/phase/ramp state, all generators' live status, aggregated metrics, last 50 log entries |
+| `GET` | `/profiles` | Lists available YAML profiles in `config/` |
+| `GET` | `/log` | Full timestamped configuration/adaptive-control log |
+| `GET` | `/adaptive/status` | Current Adaptive Control state and last decision per generator |
+| `POST` | `/adaptive/toggle?enabled=<bool>` | Manually enables/disables Adaptive Control, independent of the active profile |
+| `GET` | `/health` | Liveness check |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Full interactive documentation (all 5 services, request/response schemas): open `docs/api/swagger.html` in a browser, or run any service and visit its own `/docs` (FastAPI's built-in Swagger UI).
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Each generator additionally exposes its own `POST /start`, `POST /stop`, `PATCH /config`, `GET /status` (the controller's `/generator/*` endpoints are thin proxies to these).
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Multi-Machine Deployment (Analysis Task 5)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Two extra Compose files split the system across 2 lab machines:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+# On Machine B (targets + broker + metrics):
+docker-compose -f docker-compose.targets.yml up --build
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# Find Machine B's IP, then on Machine A (controller + dashboard + generators):
+echo "TARGET_B_IP=192.168.1.42" > .env   # use Machine B's real IP
+docker-compose -f docker-compose.generators.yml up --build
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Capture on the **physical** network interface (not `docker0`/`br-*`) on either machine to see genuine inter-machine traffic. See [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md) (Capture 5) for the full walkthrough.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+---
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## The Stealth Mode Feature
 
-## License
-For open source projects, say how it is licensed.
+The TCP/UDP generator has two modes:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+**Normal Mode**: a fixed fingerprint, immediately recognizable in Wireshark:
+- Packet size: always 512 bytes
+- Interval: always 100ms
+
+**Stealth Mode**: no recognizable pattern:
+- Packet size: random, 64-1400 bytes
+- Interval: Poisson-distributed (mean = 100ms)
+
+The result is directly visible in Wireshark; see [`docs/STEALTH_MODE.md`](docs/STEALTH_MODE.md).
+
+---
+
+## Wireshark Captures
+
+Five captures need to be created. The exact step-by-step instructions for each capture are in [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md).
+
+| # | Task | Duration | What to show |
+|---|---|---|---|
+| 1 | Protocol Distribution | 60 sec | Protocol Hierarchy screenshot |
+| 2 | Temporal Analysis | 120 sec | I/O graph with burst phases |
+| 3 | Behavioral Fingerprinting | 60 sec | Normal vs. stealth packet sizes |
+| 4 | Failure Visibility | 30 sec | TCP RST / MQTT disconnect |
+| 5 | Multi-Machine | 60 sec | Inter-machine link traffic |
+
+---
+
+## Grading Map
+
+| Criterion | Weight | How it is fulfilled |
+|---|---|---|
+| System completeness | 25% | All 10 containers run with `docker-compose up` |
+| Configuration flexibility | 15% | 3 YAML profiles plus runtime changes via API |
+| Traffic analysis depth | 25% | 5 Wireshark captures plus stealth mode analysis |
+| Multi-system deployment | 10% | 2 lab machines, capture on the link |
+| Report quality | 15% | IEEE format, all sections, AI documentation |
+| Live demo | 10% | Dashboard plus config switch plus failure demo |
+
+---
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): why each container is built the way it is
+- [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md): exact capture instructions for all 5 analyses
+- [`docs/STEALTH_MODE.md`](docs/STEALTH_MODE.md): traffic obfuscation: theory, implementation, results
+- [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md): the 15-20 minute demo script
+
+---
+
+*MIC Final Project · SS2026 · Hochschule Rhein-Waal*

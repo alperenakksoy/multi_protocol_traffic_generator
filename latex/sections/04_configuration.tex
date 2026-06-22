@@ -1,0 +1,46 @@
+\section{Configuration Format}
+
+The controller reads multi-phase YAML profiles from the \texttt{config/}
+folder. Every profile has a \texttt{global} block with the total duration,
+warmup and cooldown in seconds, and a list of \texttt{phases}. Each phase has
+a name, a duration, an optional \texttt{adaptive\_control} block, and a
+\texttt{protocols} block with one entry per protocol that should be active
+during that phase. Three profiles ship with the project: \texttt{balanced.yaml}
+(constant baseline, then stealth plus random pattern, then adaptive control),
+\texttt{http2\_heavy.yaml} (HTTP/2 under load with a burst phase), and
+\texttt{mqtt\_heavy.yaml} (a QoS 0 vs.\ QoS 2 vs.\ mixed comparison).
+
+\begin{table}[t]
+\centering
+\caption{Per-protocol configuration fields}
+\label{tab:config-fields}
+\footnotesize
+\begin{tabular}{@{}p{0.16\linewidth}p{0.78\linewidth}@{}}
+\toprule
+\textbf{Protocol} & \textbf{Fields} \\
+\midrule
+http2 & rate, payload\_size, method\_get\_pct, concurrent\_streams, get\_paths, post\_paths, pattern, burst\_rate, burst\_duration, burst\_interval, fault\_rate, extra\_latency\_ms \\
+quic & rate, payload\_size, stream\_count, use\_0rtt, pattern, fault\_rate, extra\_latency\_ms \\
+mqtt & rate, payload\_size, qos, topic\_count, qos\_distribution, pattern, fault\_rate, extra\_latency\_ms \\
+tcp/udp & tcp\_rate, udp\_rate, packet\_size, mode, mean\_interval, min\_size, max\_size, tcp\_ratio, pattern, burst\_size, burst\_interval, fault\_rate, extra\_latency\_ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Field names in the YAML have to match the generator's Pydantic model exactly.
+Anything that does not match is silently ignored rather than rejected, since
+the models accept extra keys for forward compatibility but the generators only
+apply the ones they actually recognize. One concrete example of this showing
+up in the shipped profiles: a few phases list an explicit \texttt{topics}
+array for readability, but the MQTT generator only ever looks at
+\texttt{topic\_count}. The named list currently has no effect at runtime. This
+is a known gap rather than something hidden, and it is worth fixing if there
+is time left before submission.
+
+Configuration is not locked to the YAML once the system is running.
+\texttt{POST /config/load} switches the active profile and applies phase one
+immediately if the system is already started. \texttt{PATCH /generator/\{name\}}
+forwards any subset of the fields in Table~\ref{tab:config-fields} to one
+generator. The dashboard wraps every one of these fields in a slider, toggle
+or text input that calls the same two endpoints, debounced so that dragging a
+slider does not flood the controller with requests.
