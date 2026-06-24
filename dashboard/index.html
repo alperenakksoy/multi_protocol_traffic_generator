@@ -48,17 +48,9 @@
       justify-content: space-between;
     }
 
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
 
-    h1 {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.2px;
-    }
+    h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
 
     .badge {
       display: inline-flex;
@@ -74,22 +66,16 @@
     }
 
     .dot {
-      width: 6px;
-      height: 6px;
+      width: 6px; height: 6px;
       border-radius: 50%;
       background: var(--text-light);
       flex-shrink: 0;
     }
-
     .dot.on  { background: var(--green); }
     .dot.off { background: var(--text-light); }
     .dot.err { background: var(--red); }
 
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .header-right { display: flex; align-items: center; gap: 8px; }
 
     /* ── Buttons ─────────────────────────────────────────────────────── */
     .btn {
@@ -109,18 +95,10 @@
     .btn:hover  { background: #eaeef2; }
     .btn:active { background: #dde3ea; transform: scale(0.98); }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-      border-color: #0550ae;
-    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: #0550ae; }
     .btn-primary:hover { background: #0550ae; }
 
-    .btn-stop {
-      background: #fff;
-      color: var(--red);
-      border-color: #ffc1c4;
-    }
+    .btn-stop { background: #fff; color: var(--red); border-color: #ffc1c4; }
     .btn-stop:hover { background: var(--red-muted); }
 
     .btn.active {
@@ -129,19 +107,75 @@
       color: var(--accent);
     }
 
-    .btn-sm {
-      font-size: 12px;
-      padding: 3px 10px;
+    .btn-sm { font-size: 12px; padding: 3px 10px; }
+
+    /* ── Tab bar ─────────────────────────────────────────────────────── */
+    .tab-bar {
+      position: sticky;
+      top: 52px;
+      z-index: 19;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      gap: 0;
     }
+
+    .tab-btn {
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 16px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.1s, border-color 0.1s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Protocol sub-tabs */
+    .sub-tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-muted);
+      padding-bottom: 0;
+    }
+    .sub-tab-btn {
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.1s, border-color 0.1s;
+    }
+    .sub-tab-btn:hover { color: var(--text); }
+    .sub-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .sub-tab-pane { display: none; }
+    .sub-tab-pane.active { display: block; }
+
+    /* ── Tab panes ───────────────────────────────────────────────────── */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
 
     /* ── Layout ──────────────────────────────────────────────────────── */
     main {
       max-width: 1000px;
       margin: 0 auto;
-      padding: 28px 24px;
+      padding: 24px 24px;
     }
 
-    section { margin-bottom: 28px; }
+    section { margin-bottom: 24px; }
 
     .section-label {
       font-size: 11px;
@@ -151,6 +185,67 @@
       color: var(--text-muted);
       margin-bottom: 10px;
     }
+
+    /* ── Info icon & tooltip ─────────────────────────────────────────── */
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: 9px;
+      font-weight: 700;
+      cursor: default;
+      position: relative;
+      vertical-align: middle;
+      margin-left: 4px;
+      flex-shrink: 0;
+      font-style: normal;
+      line-height: 1;
+    }
+
+    .info-icon::after {
+      content: attr(data-tip);
+      position: absolute;
+      top: 130%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2328;
+      color: #fff;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 400;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      width: 290px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .info-icon::before {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-bottom-color: #1f2328;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+    }
+
+    .info-icon:hover::after,
+    .info-icon:hover::before { opacity: 1; }
 
     /* ── KPI grid ────────────────────────────────────────────────────── */
     .kpi-grid {
@@ -179,10 +274,7 @@
       transition: color 0.3s;
     }
 
-    .kpi-label {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+    .kpi-label { font-size: 12px; color: var(--text-muted); }
 
     /* ── Live Performance (sparklines) ──────────────────────────────────── */
     .perf-grid {
@@ -237,17 +329,43 @@
       flex-wrap: wrap;
     }
 
-    .profile-label {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-right: 4px;
+    .profile-label { font-size: 13px; color: var(--text-muted); margin-right: 4px; }
+
+    /* ── Live Performance grid ───────────────────────────────────────── */
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
     }
+
+    .perf-card {
+      padding: 14px 16px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .perf-card:last-child { border-right: none; }
+
+    .perf-card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .perf-card-title .packets-count { font-weight: 500; }
+
+    .perf-canvas { width: 100%; display: block; }
+
 
     /* ── Generator table ─────────────────────────────────────────────── */
     .gen-table {
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: hidden;
+      overflow: visible;
     }
 
     .gen-header, .gen-row {
@@ -267,6 +385,7 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-muted);
+      border-radius: 8px 8px 0 0;
     }
 
     .gen-row {
@@ -286,21 +405,7 @@
       font-size: 13px;
     }
 
-    .gen-protocol-tag {
-      font-size: 11px;
-      font-family: var(--mono);
-      color: var(--text-muted);
-      background: var(--bg-muted);
-      border: 1px solid var(--border-muted);
-      border-radius: 4px;
-      padding: 1px 5px;
-    }
-
-    .rate-control {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .rate-control { display: flex; align-items: center; gap: 8px; }
 
     .rate-control input[type=range] {
       flex: 1;
@@ -313,17 +418,14 @@
     }
     .rate-control input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      width: 13px;
-      height: 13px;
+      width: 13px; height: 13px;
       border-radius: 50%;
       background: var(--accent);
       border: 2px solid #fff;
       box-shadow: 0 0 0 1px var(--border);
       cursor: pointer;
     }
-    .rate-control input[type=range]:disabled::-webkit-slider-thumb {
-      background: var(--text-light);
-    }
+    .rate-control input[type=range]:disabled::-webkit-slider-thumb { background: var(--text-light); }
     .rate-control input[type=range]:disabled { opacity: 0.5; }
 
     .rate-display {
@@ -340,7 +442,7 @@
       color: var(--text-muted);
     }
 
-    /* ── Fault Injection panel ───────────────────────────────────────── */
+    /* ── Fault display ───────────────────────────────────────────────── */
     .fault-display {
       font-family: var(--mono);
       font-size: 12px;
@@ -349,7 +451,6 @@
       text-align: right;
       flex-shrink: 0;
     }
-
     .fault-display.active { color: var(--red); font-weight: 600; }
 
     .setting-display {
@@ -385,17 +486,12 @@
       line-height: 1.4;
     }
 
-    /* Toggle */
-    .toggle-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    /* ── Toggle ──────────────────────────────────────────────────────── */
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
 
     .toggle {
       position: relative;
-      width: 34px;
-      height: 18px;
+      width: 34px; height: 18px;
       flex-shrink: 0;
     }
     .toggle input { display: none; }
@@ -410,10 +506,8 @@
     .toggle-track::after {
       content: '';
       position: absolute;
-      width: 12px;
-      height: 12px;
-      left: 3px;
-      top: 3px;
+      width: 12px; height: 12px;
+      left: 3px; top: 3px;
       border-radius: 50%;
       background: #fff;
       transition: transform 0.15s;
@@ -422,7 +516,7 @@
     .toggle input:checked + .toggle-track { background: var(--accent); }
     .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
 
-    /* Mode selector */
+    /* ── Mode selector ───────────────────────────────────────────────── */
     .mode-select {
       font-family: var(--font);
       font-size: 12px;
@@ -448,7 +542,6 @@
     }
 
     .log-inner { padding: 10px 14px; }
-
     .log-line { display: flex; gap: 12px; }
     .log-time { color: var(--text-light); flex-shrink: 0; }
     .log-msg  { color: var(--text-muted); }
@@ -477,6 +570,24 @@
       color: var(--red);
       margin-bottom: 20px;
     }
+
+    /* ── Settings row label with (i) ─────────────────────────────────── */
+    .setting-label {
+      display: flex;
+      align-items: center;
+      font-weight: 500;
+      font-size: 13px;
+      gap: 0;
+      white-space: nowrap;
+    }
+
+    /* ── Section header with row layout ─────────────────────────────── */
+    .section-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -497,574 +608,610 @@
   </div>
 </header>
 
+<!-- ── Tab navigation ──────────────────────────────────────────────────── -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tabbtn-overview"   onclick="showTab('overview')">Overview</button>
+  <button class="tab-btn"        id="tabbtn-protocols"  onclick="showTab('protocols')">Protocol Settings</button>
+  <button class="tab-btn"        id="tabbtn-faults"     onclick="showTab('faults')">Resilience &amp; Faults</button>
+  <button class="tab-btn"        id="tabbtn-analysis"   onclick="showTab('analysis')">Analysis</button>
+</div>
+
 <!-- ── Main ────────────────────────────────────────────────────────────── -->
 <main>
 
   <div id="error-banner" role="alert"></div>
 
-  <!-- KPIs -->
-  <section>
-    <div class="kpi-grid">
-      <div class="kpi">
-        <div class="kpi-value" id="kpi-packets">-</div>
-        <div class="kpi-label">Total packets</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" id="kpi-rate">-</div>
-        <div class="kpi-label">Transfer / sec</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" id="kpi-errors">-</div>
-        <div class="kpi-label">Error rate</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-value" id="kpi-active">-</div>
-        <div class="kpi-label">Active protocols</div>
-      </div>
-    </div>
-  </section>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: OVERVIEW                                                       -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane active" id="tab-overview">
 
-  <!-- Live Performance -->
-  <section>
-    <div class="section-label">Live Performance (last ~5 min)</div>
-    <div class="perf-grid">
-      <div class="perf-card">
-        <div class="perf-card-title"><span>HTTP/2</span><span class="packets-count" id="perf-rate-now-gen-http2">-</span></div>
-        <canvas class="perf-canvas" id="perf-rate-gen-http2" width="200" height="40"></canvas>
-        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-http2">-</span></div>
-        <canvas class="perf-canvas" id="perf-lat-gen-http2" width="200" height="32"></canvas>
-      </div>
-      <div class="perf-card">
-        <div class="perf-card-title"><span>QUIC</span><span class="packets-count" id="perf-rate-now-gen-quic">-</span></div>
-        <canvas class="perf-canvas" id="perf-rate-gen-quic" width="200" height="40"></canvas>
-        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-quic">-</span></div>
-        <canvas class="perf-canvas" id="perf-lat-gen-quic" width="200" height="32"></canvas>
-      </div>
-      <div class="perf-card">
-        <div class="perf-card-title"><span>MQTT</span><span class="packets-count" id="perf-rate-now-gen-mqtt">-</span></div>
-        <canvas class="perf-canvas" id="perf-rate-gen-mqtt" width="200" height="40"></canvas>
-        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-mqtt">-</span></div>
-        <canvas class="perf-canvas" id="perf-lat-gen-mqtt" width="200" height="32"></canvas>
-      </div>
-      <div class="perf-card">
-        <div class="perf-card-title"><span>TCP/UDP</span><span class="packets-count" id="perf-rate-now-gen-tcpudp">-</span></div>
-        <canvas class="perf-canvas" id="perf-rate-gen-tcpudp" width="200" height="40"></canvas>
-        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-tcpudp">-</span></div>
-        <canvas class="perf-canvas" id="perf-lat-gen-tcpudp" width="200" height="32"></canvas>
-      </div>
-    </div>
-    <div class="perf-legend">
-      <span><i class="swatch swatch-rate"></i> Throughput (bytes/sec)</span>
-      <span><i class="swatch swatch-latency"></i> Latency (ms)</span>
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Each generator keeps a rolling ~5-minute history of its own throughput/latency/error
-      snapshots (one point every ~5s) and reports it via its own <code>/status</code> endpoint;
-      the controller passes it through unchanged, no separate metrics polling needed. Useful for
-      seeing the effect of a config change (profile switch, Adaptive Control, fault injection)
-      live, without waiting for a Wireshark capture.
-    </div>
-  </section>
-
-  <!-- Profile -->
-  <section>
-    <div class="section-label">Traffic Profile (Presets)</div>
-    <div class="profile-row">
-      <span class="profile-label">Load:</span>
-      <button class="btn btn-sm" id="prof-http2_heavy"  onclick="loadProfile('http2_heavy')"
-              title="3 phases: http2_dominant, http2_burst, cooldown_phase. Shows HTTP/2 multiplexing and burst patterns.">HTTP/2 Dominant</button>
-      <button class="btn btn-sm" id="prof-mqtt_heavy"   onclick="loadProfile('mqtt_heavy')"
-              title="3 phases: mqtt_qos0_heavy, mqtt_qos2_comparison, mqtt_mixed. Shows differences between QoS handshakes.">MQTT Dominant</button>
-      <button class="btn btn-sm" id="prof-balanced"     onclick="loadProfile('balanced')"
-              title="3 phases: balanced_constant, balanced_with_stealth, balanced_adaptive. Covers all 5 analysis tasks.">Balanced</button>
-      <span id="active-phase" style="font-size:12px;color:var(--text-muted);margin-left:8px"></span>
-    </div>
-    <div id="phase-desc" style="font-size:12px;color:var(--text-light);margin-top:6px"></div>
-  </section>
-
-  <!-- Adaptive Control -->
-  <section>
-    <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
-      <span>Adaptive Control (Autonomy)</span>
-      <div class="toggle-wrap">
-        <span id="adaptive-label" style="font-size:12px;color:var(--text-muted)">Off</span>
-        <label class="toggle">
-          <input type="checkbox" id="toggle-adaptive" onchange="toggleAdaptive(this.checked)">
-          <div class="toggle-track"></div>
-        </label>
-      </div>
-    </div>
-    <div class="gen-table" id="adaptive-table" style="display:none">
-      <div class="gen-header" style="grid-template-columns: 110px 100px 90px 1fr 90px;">
-        <div>Generator</div>
-        <div>Error Rate</div>
-        <div>Factor</div>
-        <div>Applied Rate(s)</div>
-        <div>Action</div>
-      </div>
-      <div id="adaptive-rows"></div>
-    </div>
-    <div id="adaptive-empty" style="font-size:12px;color:var(--text-light);padding:6px 0">
-      Inactive. While disabled, the controller does not change any rates automatically.
-      When enabled, it periodically checks each generator's live error rate (and latency,
-      where reported) and scales its rate up or down accordingly, with no manual
-      intervention required. This is also enabled automatically during the
-      <code>balanced_adaptive</code> profile phase.
-    </div>
-  </section>
-
-  <!-- Generators -->
-  <section>
-    <div class="section-label">Generators</div>
-    <div class="gen-table">
-      <div class="gen-header">
-        <div>Protocol</div>
-        <div>Rate (packets/sec)</div>
-        <div>Packets sent</div>
-        <div>Errors</div>
-        <div>On / Off</div>
-      </div>
-
-      <!-- HTTP/2 -->
-      <div class="gen-row">
-        <div class="gen-name">
-          <div class="dot" id="dot-gen-http2"></div>
-          HTTP/2
+    <!-- KPIs -->
+    <section>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-value" id="kpi-packets">-</div>
+          <div class="kpi-label">Total packets</div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="1" max="200" value="50" id="range-gen-http2"
-                 oninput="onRateChange('gen-http2', this.value)">
-          <span class="rate-display" id="rate-gen-http2">50</span>
+        <div class="kpi">
+          <div class="kpi-value" id="kpi-rate">-</div>
+          <div class="kpi-label">Transfer / sec</div>
         </div>
-        <div class="packets-count" id="pkts-gen-http2">-</div>
-        <div class="packets-count" id="err-gen-http2">-</div>
+        <div class="kpi">
+          <div class="kpi-value" id="kpi-errors">-</div>
+          <div class="kpi-label">Error rate</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-value" id="kpi-active">-</div>
+          <div class="kpi-label">Active protocols</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Performance -->
+    <section>
+      <div class="section-label">Live Performance
+        <i class="info-icon" data-tip="Per-protocol throughput and latency from the server-side rolling history (~5 min). Each generator reports one snapshot every ~5s via its /status endpoint. Shows the effect of profile switches, Adaptive Control, and fault injection in real time.">i</i>
+      </div>
+      <div class="perf-grid">
+        <div class="perf-card">
+          <div class="perf-card-title"><span>HTTP/2</span><span class="packets-count" id="perf-rate-now-gen-http2">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-http2" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-http2">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-http2" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>QUIC</span><span class="packets-count" id="perf-rate-now-gen-quic">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-quic" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-quic">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-quic" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>MQTT</span><span class="packets-count" id="perf-rate-now-gen-mqtt">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-mqtt" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-mqtt">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-mqtt" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>TCP/UDP</span><span class="packets-count" id="perf-rate-now-gen-tcpudp">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-tcpudp" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-tcpudp">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-tcpudp" width="200" height="32"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Traffic Profiles -->
+    <section>
+      <div class="section-label">Traffic Profile</div>
+      <div class="profile-row">
+        <span class="profile-label">Preset:</span>
+        <button class="btn btn-sm" id="prof-http2_heavy" onclick="loadProfile('http2_heavy')"
+                title="3 phases: http2_dominant → http2_burst → cooldown">HTTP/2 Dominant</button>
+        <button class="btn btn-sm" id="prof-mqtt_heavy"  onclick="loadProfile('mqtt_heavy')"
+                title="3 phases: mqtt_qos0_heavy → mqtt_qos2_comparison → mqtt_mixed">MQTT Dominant</button>
+        <button class="btn btn-sm" id="prof-balanced"    onclick="loadProfile('balanced')"
+                title="3 phases: balanced_constant → balanced_with_stealth → balanced_adaptive">Balanced</button>
+        <span id="active-phase" style="font-size:12px;color:var(--text-muted);margin-left:8px"></span>
+      </div>
+      <div id="phase-desc" style="font-size:12px;color:var(--text-light);margin-top:6px"></div>
+    </section>
+
+    <!-- Adaptive Control -->
+    <section>
+      <div class="section-row">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="section-label" style="margin-bottom:0">Adaptive Control</span>
+          <i class="info-icon" data-tip="Real closed-loop feedback. Every few seconds the controller checks each generator's error rate against a threshold and scales rates up or down by a bounded multiplier, with no human involved. Also activates during the balanced_adaptive profile phase.">i</i>
+        </div>
         <div class="toggle-wrap">
+          <span id="adaptive-label" style="font-size:12px;color:var(--text-muted)">Off</span>
           <label class="toggle">
-            <input type="checkbox" id="toggle-gen-http2" onchange="toggleGen('gen-http2', this.checked)">
+            <input type="checkbox" id="toggle-adaptive" onchange="toggleAdaptive(this.checked)">
             <div class="toggle-track"></div>
           </label>
         </div>
       </div>
+      <div class="gen-table" id="adaptive-table" style="display:none">
+        <div class="gen-header" style="grid-template-columns: 110px 100px 90px 1fr 90px;">
+          <div>Generator</div><div>Error Rate</div><div>Factor</div><div>Applied Rate(s)</div><div>Action</div>
+        </div>
+        <div id="adaptive-rows"></div>
+      </div>
+      <div id="adaptive-empty" style="font-size:12px;color:var(--text-light);padding:4px 0">
+        Inactive. No rates are changed automatically while disabled.
+      </div>
+    </section>
 
-      <!-- QUIC -->
-      <div class="gen-row">
-        <div class="gen-name">
-          <div class="dot" id="dot-gen-quic"></div>
-          QUIC
+    <!-- Generators -->
+    <section>
+      <div class="section-label">Generators</div>
+      <div class="gen-table">
+        <div class="gen-header">
+          <div>Protocol</div>
+          <div>Rate (packets/sec)</div>
+          <div>Packets sent</div>
+          <div>Errors</div>
+          <div>On / Off</div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="1" max="100" value="20" id="range-gen-quic"
-                 oninput="onRateChange('gen-quic', this.value)">
-          <span class="rate-display" id="rate-gen-quic">20</span>
+
+        <!-- HTTP/2 -->
+        <div class="gen-row">
+          <div class="gen-name"><div class="dot" id="dot-gen-http2"></div>HTTP/2</div>
+          <div class="rate-control">
+            <input type="range" min="1" max="200" value="50" id="range-gen-http2"
+                   oninput="onRateChange('gen-http2', this.value)">
+            <span class="rate-display" id="rate-gen-http2">50</span>
+          </div>
+          <div class="packets-count" id="pkts-gen-http2">-</div>
+          <div class="packets-count" id="err-gen-http2">-</div>
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gen-http2" onchange="toggleGen('gen-http2', this.checked)">
+              <div class="toggle-track"></div>
+            </label>
+          </div>
         </div>
-        <div class="packets-count" id="pkts-gen-quic">-</div>
-        <div class="packets-count" id="err-gen-quic">-</div>
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" id="toggle-gen-quic" onchange="toggleGen('gen-quic', this.checked)">
-            <div class="toggle-track"></div>
-          </label>
+
+        <!-- QUIC -->
+        <div class="gen-row">
+          <div class="gen-name"><div class="dot" id="dot-gen-quic"></div>QUIC</div>
+          <div class="rate-control">
+            <input type="range" min="1" max="100" value="20" id="range-gen-quic"
+                   oninput="onRateChange('gen-quic', this.value)">
+            <span class="rate-display" id="rate-gen-quic">20</span>
+          </div>
+          <div class="packets-count" id="pkts-gen-quic">-</div>
+          <div class="packets-count" id="err-gen-quic">-</div>
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gen-quic" onchange="toggleGen('gen-quic', this.checked)">
+              <div class="toggle-track"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- MQTT -->
+        <div class="gen-row">
+          <div class="gen-name"><div class="dot" id="dot-gen-mqtt"></div>MQTT</div>
+          <div class="rate-control">
+            <input type="range" min="1" max="500" value="30" id="range-gen-mqtt"
+                   oninput="onRateChange('gen-mqtt', this.value)">
+            <span class="rate-display" id="rate-gen-mqtt">30</span>
+          </div>
+          <div class="packets-count" id="pkts-gen-mqtt">-</div>
+          <div class="packets-count" id="err-gen-mqtt">-</div>
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gen-mqtt" onchange="toggleGen('gen-mqtt', this.checked)">
+              <div class="toggle-track"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- TCP/UDP -->
+        <div class="gen-row">
+          <div class="gen-name"><div class="dot" id="dot-gen-tcpudp"></div>TCP / UDP</div>
+          <div class="rate-control">
+            <input type="range" min="1" max="100" value="10" id="range-gen-tcpudp"
+                   oninput="onRateChange('gen-tcpudp', this.value)">
+            <span class="rate-display" id="rate-gen-tcpudp">10</span>
+            <select class="mode-select" id="mode-gen-tcpudp" onchange="onModeChange(this.value)"
+                    title="Stealth: randomises packet size and uses Poisson-distributed timing to mimic background traffic.">
+              <option value="normal">Normal</option>
+              <option value="stealth">Stealth</option>
+            </select>
+          </div>
+          <div class="packets-count" id="pkts-gen-tcpudp">-</div>
+          <div class="packets-count" id="err-gen-tcpudp">-</div>
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gen-tcpudp" onchange="toggleGen('gen-tcpudp', this.checked)">
+              <div class="toggle-track"></div>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- System Log -->
+    <section>
+      <div class="section-row">
+        <div class="section-label" style="margin-bottom:0">System Log</div>
+        <button class="btn btn-sm" onclick="clearLog()" style="font-weight:400">Clear</button>
+      </div>
+      <div class="log-box" id="log-box">
+        <div class="log-inner" id="log-inner">
+          <div class="log-line"><span class="log-time">-</span><span class="log-msg">Waiting for connection to the controller...</span></div>
         </div>
       </div>
+    </section>
 
-      <!-- MQTT -->
-      <div class="gen-row">
-        <div class="gen-name">
-          <div class="dot" id="dot-gen-mqtt"></div>
-          MQTT
-        </div>
-        <div class="rate-control">
-          <input type="range" min="1" max="500" value="30" id="range-gen-mqtt"
-                 oninput="onRateChange('gen-mqtt', this.value)">
-          <span class="rate-display" id="rate-gen-mqtt">30</span>
-        </div>
-        <div class="packets-count" id="pkts-gen-mqtt">-</div>
-        <div class="packets-count" id="err-gen-mqtt">-</div>
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" id="toggle-gen-mqtt" onchange="toggleGen('gen-mqtt', this.checked)">
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-      </div>
-
-      <!-- TCP/UDP with mode switch -->
-      <div class="gen-row">
-        <div class="gen-name">
-          <div class="dot" id="dot-gen-tcpudp"></div>
-          TCP / UDP
-        </div>
-        <div class="rate-control">
-          <input type="range" min="1" max="100" value="10" id="range-gen-tcpudp"
-                 oninput="onRateChange('gen-tcpudp', this.value)">
-          <span class="rate-display" id="rate-gen-tcpudp">10</span>
-          <select class="mode-select" id="mode-gen-tcpudp" onchange="onModeChange(this.value)">
-            <option value="normal">Normal</option>
-            <option value="stealth">Stealth</option>
-          </select>
-        </div>
-        <div class="packets-count" id="pkts-gen-tcpudp">-</div>
-        <div class="packets-count" id="err-gen-tcpudp">-</div>
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" id="toggle-gen-tcpudp" onchange="toggleGen('gen-tcpudp', this.checked)">
-            <div class="toggle-track"></div>
-          </label>
-        </div>
-      </div>
-
+    <!-- Footer -->
+    <div class="footer-meta">
+      <span>Controller <span id="ctrl-url">localhost:8000</span></span>
+      <span>Last update <span id="last-update">-</span></span>
+      <span>Uptime <span id="uptime-footer">-</span></span>
     </div>
-  </section>
 
-  <!-- HTTP/2 Generator Settings -->
-  <section>
-    <div class="section-label">HTTP/2 Generator Settings</div>
-    <div class="gen-table">
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Payload size (POST)</div>
-        <div class="rate-control">
-          <input type="range" min="256" max="8192" step="256" value="2048" id="payload-gen-http2"
-                 oninput="onPayloadChange('gen-http2', this.value)">
-          <span class="setting-display" id="payload-disp-gen-http2">2048 B</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Method mix</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="100" step="5" value="70" id="methodmix-gen-http2"
-                 oninput="onMethodMixChange('gen-http2', this.value)">
-          <span class="setting-display" id="methodmix-disp-gen-http2">70% GET</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Concurrent streams</div>
-        <div class="rate-control">
-          <input type="range" min="1" max="10" step="1" value="3" id="streams-gen-http2"
-                 oninput="onStreamsChange('gen-http2', this.value)">
-          <span class="setting-display" id="streams-disp-gen-http2">3</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">GET paths</div>
-        <input type="text" class="text-input" id="getpaths-gen-http2" value="/"
-               placeholder="/, /api/items"
-               onchange="onPathsChange('gen-http2', 'get_paths', this.value)">
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">POST paths</div>
-        <input type="text" class="text-input" id="postpaths-gen-http2" value="/data"
-               placeholder="/data, /api/upload"
-               onchange="onPathsChange('gen-http2', 'post_paths', this.value)">
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Sending pattern</div>
-        <div class="rate-control">
-          <select class="mode-select" id="pattern-gen-http2" onchange="onHttp2PatternChange(this.value)">
-            <option value="constant">Constant</option>
-            <option value="periodic_burst">Periodic burst</option>
-            <option value="random">Random (Poisson)</option>
-          </select>
-          <span class="setting-display" id="burstactive-disp-gen-http2" style="width:auto"></span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Burst rate</div>
-        <div class="rate-control">
-          <input type="range" min="50" max="1000" step="50" value="400" id="burstrate-gen-http2"
-                 oninput="onHttp2BurstFieldChange('gen-http2', 'burst_rate', this.value)">
-          <span class="setting-display" id="burstrate-disp-gen-http2">400 req/s</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Burst duration</div>
-        <div class="rate-control">
-          <input type="range" min="1" max="30" step="1" value="5" id="burstduration-gen-http2"
-                 oninput="onHttp2BurstFieldChange('gen-http2', 'burst_duration', this.value)">
-          <span class="setting-display" id="burstduration-disp-gen-http2">5s</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Burst interval</div>
-        <div class="rate-control">
-          <input type="range" min="5" max="120" step="5" value="30" id="burstinterval-gen-http2"
-                 oninput="onHttp2BurstFieldChange('gen-http2', 'burst_interval', this.value)">
-          <span class="setting-display" id="burstinterval-disp-gen-http2">30s</span>
-        </div>
-      </div>
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Payload size, the GET/POST method mix, the number of multiplexed streams per connection,
-      and the target paths for GET/POST requests (comma-separated, one chosen at random per
-      request) can be changed at runtime via <code>PATCH /generator/gen-http2</code>. Sending
-      pattern "Periodic burst" alternates between the base rate and Burst rate for Burst duration
-      seconds every Burst interval seconds - visible as periodic spikes in Wireshark I/O graphs.
-      "Random (Poisson)" keeps the same average rate but uses exponentially-distributed gaps
-      between requests, mimicking bursty human-driven traffic.
-    </div>
-  </section>
+  </div><!-- /tab-overview -->
 
-  <!-- QUIC Generator Settings -->
-  <section>
-    <div class="section-label">QUIC / HTTP3 Generator Settings</div>
-    <div class="gen-table">
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Payload size (POST)</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="4096" step="64" value="512" id="payload-gen-quic"
-                 oninput="onPayloadChange('gen-quic', this.value)">
-          <span class="setting-display" id="payload-disp-gen-quic">512 B</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Concurrent streams</div>
-        <div class="rate-control">
-          <input type="range" min="1" max="10" step="1" value="1" id="streams-gen-quic"
-                 oninput="onStreamCountChange('gen-quic', this.value)">
-          <span class="setting-display" id="streams-disp-gen-quic">1</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">0-RTT session resumption</div>
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" id="zerortt-gen-quic" onchange="onZeroRttToggle('gen-quic', this.checked)">
-            <div class="toggle-track"></div>
-          </label>
-          <span class="setting-display" id="zerortt-disp-gen-quic" style="width:auto">not used</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Sending pattern</div>
-        <div class="rate-control">
-          <select class="mode-select" id="pattern-gen-quic" onchange="onPatternChange('gen-quic', this.value)">
-            <option value="constant">Constant</option>
-            <option value="random">Random (Poisson)</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Payload size (bytes sent as the body of each HTTP/3 POST request) and the number of
-      multiplexed streams per connection cycle can be changed at runtime via
-      <code>PATCH /generator/gen-quic</code>. 0-RTT caches the TLS session ticket from the
-      server and offers it on the next (re)connect; "used" only lights up once a connection
-      actually resumed via 0-RTT instead of a full 1-RTT handshake. Sending pattern "Random
-      (Poisson)" keeps the same average rate but uses exponentially-distributed gaps between
-      connection cycles.
-    </div>
-  </section>
 
-  <!-- MQTT Generator Settings -->
-  <section>
-    <div class="section-label">MQTT Generator Settings</div>
-    <div class="gen-table">
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Topic count</div>
-        <div class="rate-control">
-          <input type="range" min="1" max="20" step="1" value="5" id="topics-gen-mqtt"
-                 oninput="onTopicCountChange('gen-mqtt', this.value)">
-          <span class="setting-display" id="topics-disp-gen-mqtt">5</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">QoS distribution (0 / 1 / 2)</div>
-        <div class="rate-control" style="gap:6px">
-          <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
-                 id="qos0-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')">
-          <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
-                 id="qos1-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')">
-          <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
-                 id="qos2-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')">
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Received (subscriber)</div>
-        <div class="packets-count" id="mqtt-received-gen-mqtt">-</div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Sending pattern</div>
-        <div class="rate-control">
-          <select class="mode-select" id="pattern-gen-mqtt" onchange="onPatternChange('gen-mqtt', this.value)">
-            <option value="constant">Constant</option>
-            <option value="random">Random (Poisson)</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Topic count selects how many topics (out of sensors/..., actuators/..., status/..., then
-      load/topic-N) are used for publish and subscribe; changing it re-subscribes this generator.
-      QoS distribution gives relative weights for QoS 0/1/2 on each publish; leave all at 0 to use
-      a fixed QoS instead. This generator also subscribes to its own topics, so "Received" shows
-      the broker's fan-out traffic. Sending pattern "Random (Poisson)" keeps the same average
-      rate but uses exponentially-distributed gaps between publishes. Changes apply via
-      <code>PATCH /generator/gen-mqtt</code>.
-    </div>
-  </section>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: PROTOCOL SETTINGS                                              -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-protocols">
 
-  <!-- TCP/UDP Generator Settings -->
-  <section>
-    <div class="section-label">TCP/UDP Generator Settings</div>
-    <div class="gen-table">
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Sending pattern</div>
-        <div class="rate-control">
-          <select class="mode-select" id="pattern-gen-tcpudp" onchange="onPatternChange('gen-tcpudp', this.value)">
-            <option value="constant">Constant</option>
-            <option value="periodic_burst">Periodic burst</option>
-            <option value="random">Random (Poisson)</option>
-          </select>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Burst size</div>
-        <div class="rate-control">
-          <input type="range" min="1" max="50" step="1" value="10" id="burstsize-gen-tcpudp"
-                 oninput="onBurstSizeChange('gen-tcpudp', this.value)">
-          <span class="setting-display" id="burstsize-disp-gen-tcpudp">10</span>
-        </div>
-      </div>
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 140px 1fr;">
-        <div class="gen-name">Burst interval</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="2000" step="50" value="1000" id="burstinterval-gen-tcpudp"
-                 oninput="onBurstIntervalChange('gen-tcpudp', this.value)">
-          <span class="setting-display" id="burstinterval-disp-gen-tcpudp">1000ms</span>
-        </div>
-      </div>
+    <!-- Sub-tab bar -->
+    <div class="sub-tab-bar">
+      <button class="sub-tab-btn active" id="ptabbtn-http2"   onclick="showProtoTab('http2')">HTTP/2</button>
+      <button class="sub-tab-btn"        id="ptabbtn-quic"    onclick="showProtoTab('quic')">QUIC</button>
+      <button class="sub-tab-btn"        id="ptabbtn-mqtt"    onclick="showProtoTab('mqtt')">MQTT</button>
+      <button class="sub-tab-btn"        id="ptabbtn-tcpudp"  onclick="showProtoTab('tcpudp')">TCP / UDP</button>
     </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Pattern controls the overall sending cadence, independent of Normal/Stealth (which controls
-      packet size). "Constant" sends one packet per interval derived from the rate; "Periodic
-      burst" sends Burst size packets back-to-back, then idles for Burst interval; "Random" uses
-      Poisson-distributed gaps between sends. Burst size/interval only apply to the periodic burst
-      pattern. Changes apply via <code>PATCH /generator/gen-tcpudp</code>.
-    </div>
-  </section>
 
-  <!-- Fault Injection / Resilience Test -->
-  <section>
-    <div class="section-label">Fault Injection (Resilience Test)</div>
-    <div class="gen-table">
-      <div class="gen-header" style="grid-template-columns: 110px 1fr 1fr 70px;">
-        <div>Protocol</div>
-        <div>Injected Error Rate</div>
-        <div>Extra Latency</div>
-        <div>Latency</div>
+    <!-- HTTP/2 Settings -->
+    <div class="sub-tab-pane active" id="ptab-http2">
+      <div class="gen-table">
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Payload size (POST)
+            <i class="info-icon" data-tip="Bytes sent as the POST body per request. Larger values produce bigger frames visible in Wireshark.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="256" max="8192" step="256" value="2048" id="payload-gen-http2"
+                   oninput="onPayloadChange('gen-http2', this.value)">
+            <span class="setting-display" id="payload-disp-gen-http2">2048 B</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Method mix
+            <i class="info-icon" data-tip="Percentage of requests using GET vs POST. 70% GET means 7 out of 10 requests are GETs.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="5" value="70" id="methodmix-gen-http2"
+                   oninput="onMethodMixChange('gen-http2', this.value)">
+            <span class="setting-display" id="methodmix-disp-gen-http2">70% GET</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Concurrent streams
+            <i class="info-icon" data-tip="Number of HTTP/2 streams multiplexed per connection. More streams = more parallel frames on the wire, visible as burst clusters in Wireshark.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="10" step="1" value="3" id="streams-gen-http2"
+                   oninput="onStreamsChange('gen-http2', this.value)">
+            <span class="setting-display" id="streams-disp-gen-http2">3</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">GET paths</div>
+          <input type="text" class="text-input" id="getpaths-gen-http2" value="/"
+                 placeholder="/, /api/items"
+                 onchange="onPathsChange('gen-http2', 'get_paths', this.value)">
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">POST paths</div>
+          <input type="text" class="text-input" id="postpaths-gen-http2" value="/data"
+                 placeholder="/data, /api/upload"
+                 onchange="onPathsChange('gen-http2', 'post_paths', this.value)">
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Sending pattern
+            <i class="info-icon" data-tip="Constant: fixed intervals.\nPeriodic burst: alternates between base rate and burst rate. The spike shows up clearly in the Wireshark IO graph.\nRandom (Poisson): same average rate, exponentially-distributed gaps. Mimics bursty human traffic.">i</i>
+          </div>
+          <div class="rate-control">
+            <select class="mode-select" id="pattern-gen-http2" onchange="onHttp2PatternChange(this.value)">
+              <option value="constant">Constant</option>
+              <option value="periodic_burst">Periodic burst</option>
+              <option value="random">Random (Poisson)</option>
+            </select>
+            <span class="setting-display" id="burstactive-disp-gen-http2" style="width:auto"></span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Burst rate
+            <i class="info-icon" data-tip="Peak rate during the burst phase (only used with Periodic burst pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="50" max="1000" step="50" value="400" id="burstrate-gen-http2"
+                   oninput="onHttp2BurstFieldChange('gen-http2', 'burst_rate', this.value)">
+            <span class="setting-display" id="burstrate-disp-gen-http2">400 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Burst duration
+            <i class="info-icon" data-tip="How long (seconds) the burst rate is held before dropping back to the base rate.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="30" step="1" value="5" id="burstduration-gen-http2"
+                   oninput="onHttp2BurstFieldChange('gen-http2', 'burst_duration', this.value)">
+            <span class="setting-display" id="burstduration-disp-gen-http2">5s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Burst interval
+            <i class="info-icon" data-tip="Time between the end of one burst and the start of the next (at base rate).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="120" step="5" value="30" id="burstinterval-gen-http2"
+                   oninput="onHttp2BurstFieldChange('gen-http2', 'burst_interval', this.value)">
+            <span class="setting-display" id="burstinterval-disp-gen-http2">30s</span>
+          </div>
+        </div>
       </div>
+    </div><!-- /ptab-http2 -->
 
-      <!-- HTTP/2 -->
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
-        <div class="gen-name"><div class="dot" id="dot-fault-gen-http2"></div>HTTP/2</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-http2"
-                 oninput="onFaultChange('gen-http2', this.value)">
-          <span class="fault-display" id="fault-disp-gen-http2">0%</span>
+    <!-- QUIC Settings -->
+    <div class="sub-tab-pane" id="ptab-quic">
+      <div class="gen-table">
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Payload size (POST)
+            <i class="info-icon" data-tip="Bytes sent as the HTTP/3 POST body. A fixed size produces a recognizable packet-size fingerprint on the wire.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="4096" step="64" value="512" id="payload-gen-quic"
+                   oninput="onPayloadChange('gen-quic', this.value)">
+            <span class="setting-display" id="payload-disp-gen-quic">512 B</span>
+          </div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-http2"
-                 oninput="onLatencyChange('gen-http2', this.value)">
-          <span class="fault-display" id="lat-disp-gen-http2">0ms</span>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Concurrent streams
+            <i class="info-icon" data-tip="Number of QUIC streams multiplexed per connection cycle.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="10" step="1" value="1" id="streams-gen-quic"
+                   oninput="onStreamCountChange('gen-quic', this.value)">
+            <span class="setting-display" id="streams-disp-gen-quic">1</span>
+          </div>
         </div>
-        <div class="packets-count" id="meas-gen-http2">-</div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            0-RTT session resumption
+            <i class="info-icon" data-tip="Caches the TLS session ticket from the server and offers it on the next reconnect. 'used ✓' lights up only when a connection actually resumed without a full 1-RTT handshake.">i</i>
+          </div>
+          <div class="toggle-wrap">
+            <label class="toggle">
+              <input type="checkbox" id="zerortt-gen-quic" onchange="onZeroRttToggle('gen-quic', this.checked)">
+              <div class="toggle-track"></div>
+            </label>
+            <span class="setting-display" id="zerortt-disp-gen-quic" style="width:auto">not used</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Sending pattern
+            <i class="info-icon" data-tip="Constant: fixed intervals between connection cycles.\nRandom (Poisson): same average rate, exponentially-distributed gaps.">i</i>
+          </div>
+          <div class="rate-control">
+            <select class="mode-select" id="pattern-gen-quic" onchange="onPatternChange('gen-quic', this.value)">
+              <option value="constant">Constant</option>
+              <option value="random">Random (Poisson)</option>
+            </select>
+          </div>
+        </div>
       </div>
+    </div><!-- /ptab-quic -->
 
-      <!-- QUIC -->
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
-        <div class="gen-name"><div class="dot" id="dot-fault-gen-quic"></div>QUIC</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-quic"
-                 oninput="onFaultChange('gen-quic', this.value)">
-          <span class="fault-display" id="fault-disp-gen-quic">0%</span>
+    <!-- MQTT Settings -->
+    <div class="sub-tab-pane" id="ptab-mqtt">
+      <div class="gen-table">
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Topic count
+            <i class="info-icon" data-tip="How many topics (from sensors/…, actuators/…, status/…, load/topic-N) are used for publish and subscribe. Changing this re-subscribes the generator.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="20" step="1" value="5" id="topics-gen-mqtt"
+                   oninput="onTopicCountChange('gen-mqtt', this.value)">
+            <span class="setting-display" id="topics-disp-gen-mqtt">5</span>
+          </div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-quic"
-                 oninput="onLatencyChange('gen-quic', this.value)">
-          <span class="fault-display" id="lat-disp-gen-quic">0ms</span>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            QoS weights (0 / 1 / 2)
+            <i class="info-icon" data-tip="Relative weights for QoS 0 (fire-and-forget), QoS 1 (at-least-once) and QoS 2 (exactly-once, 4-way handshake) per publish. Leave all at 0 to use a fixed QoS level.">i</i>
+          </div>
+          <div class="rate-control" style="gap:6px">
+            <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
+                   id="qos0-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')" placeholder="QoS 0">
+            <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
+                   id="qos1-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')" placeholder="QoS 1">
+            <input type="number" class="text-input" style="width:60px" min="0" step="0.1" value="0"
+                   id="qos2-gen-mqtt" onchange="onQosWeightChange('gen-mqtt')" placeholder="QoS 2">
+          </div>
         </div>
-        <div class="packets-count" id="meas-gen-quic">-</div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Received (subscriber)
+            <i class="info-icon" data-tip="This generator also subscribes to its own topics. 'Received' shows the broker's fan-out traffic back to the subscriber. It shows up as a second stream of PUBLISH packets in Wireshark.">i</i>
+          </div>
+          <div class="packets-count" id="mqtt-received-gen-mqtt">-</div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Sending pattern
+            <i class="info-icon" data-tip="Constant: fixed intervals between publishes.\nRandom (Poisson): same average rate, exponentially-distributed gaps.">i</i>
+          </div>
+          <div class="rate-control">
+            <select class="mode-select" id="pattern-gen-mqtt" onchange="onPatternChange('gen-mqtt', this.value)">
+              <option value="constant">Constant</option>
+              <option value="random">Random (Poisson)</option>
+            </select>
+          </div>
+        </div>
       </div>
+    </div><!-- /ptab-mqtt -->
 
-      <!-- MQTT -->
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
-        <div class="gen-name"><div class="dot" id="dot-fault-gen-mqtt"></div>MQTT</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-mqtt"
-                 oninput="onFaultChange('gen-mqtt', this.value)">
-          <span class="fault-display" id="fault-disp-gen-mqtt">0%</span>
+    <!-- TCP/UDP Settings -->
+    <div class="sub-tab-pane" id="ptab-tcpudp">
+      <div class="gen-table">
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Sending pattern
+            <i class="info-icon" data-tip="Constant: one packet per interval derived from the rate.\nPeriodic burst: sends Burst size packets back-to-back, then idles for Burst interval.\nRandom (Poisson): exponentially-distributed gaps between sends.\nIndependent of Normal/Stealth mode (which controls packet size).">i</i>
+          </div>
+          <div class="rate-control">
+            <select class="mode-select" id="pattern-gen-tcpudp" onchange="onPatternChange('gen-tcpudp', this.value)">
+              <option value="constant">Constant</option>
+              <option value="periodic_burst">Periodic burst</option>
+              <option value="random">Random (Poisson)</option>
+            </select>
+          </div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-mqtt"
-                 oninput="onLatencyChange('gen-mqtt', this.value)">
-          <span class="fault-display" id="lat-disp-gen-mqtt">0ms</span>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Burst size
+            <i class="info-icon" data-tip="Number of packets sent back-to-back during one burst (only used with Periodic burst pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="50" step="1" value="10" id="burstsize-gen-tcpudp"
+                   oninput="onBurstSizeChange('gen-tcpudp', this.value)">
+            <span class="setting-display" id="burstsize-disp-gen-tcpudp">10</span>
+          </div>
         </div>
-        <div class="packets-count" id="meas-gen-mqtt">-</div>
-      </div>
-
-      <!-- TCP/UDP -->
-      <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
-        <div class="gen-name"><div class="dot" id="dot-fault-gen-tcpudp"></div>TCP/UDP</div>
-        <div class="rate-control">
-          <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-tcpudp"
-                 oninput="onFaultChange('gen-tcpudp', this.value)">
-          <span class="fault-display" id="fault-disp-gen-tcpudp">0%</span>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Burst interval
+            <i class="info-icon" data-tip="Idle time between bursts (only used with Periodic burst pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="2000" step="50" value="1000" id="burstinterval-gen-tcpudp"
+                   oninput="onBurstIntervalChange('gen-tcpudp', this.value)">
+            <span class="setting-display" id="burstinterval-disp-gen-tcpudp">1000ms</span>
+          </div>
         </div>
-        <div class="rate-control">
-          <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-tcpudp"
-                 oninput="onLatencyChange('gen-tcpudp', this.value)">
-          <span class="fault-display" id="lat-disp-gen-tcpudp">0ms</span>
+      </div>
+    </div><!-- /ptab-tcpudp -->
+
+  </div><!-- /tab-protocols -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 3: RESILIENCE & FAULTS                                            -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-faults">
+
+    <section>
+      <div class="section-row">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="section-label" style="margin-bottom:0">Fault Injection</span>
+          <i class="info-icon" data-tip="Inject artificial errors and latency per protocol. Useful for Task 4 (Failure Visibility): raise the error rate, then watch Adaptive Control (Overview tab) automatically reduce the send rate. Reduce fault to 0 and the rate climbs back.">i</i>
         </div>
-        <div class="packets-count" id="meas-gen-tcpudp">-</div>
       </div>
+      <div class="gen-table">
+        <div class="gen-header" style="grid-template-columns: 110px 1fr 1fr 70px;">
+          <div>Protocol</div>
+          <div>Injected Error Rate</div>
+          <div>Extra Latency</div>
+          <div>Measured</div>
+        </div>
 
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Artificial errors and latency per protocol, useful for live demonstrations of
-      <strong>Task 4 (Failure Visibility)</strong>: increasing the error rate raises the overall
-      error rate, and with <em>Adaptive Control</em> enabled, the send rate is then automatically
-      reduced (and increases again once the error rate or latency is brought back down).
-    </div>
-  </section>
+        <!-- HTTP/2 -->
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
+          <div class="gen-name"><div class="dot" id="dot-fault-gen-http2"></div>HTTP/2</div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-http2"
+                   oninput="onFaultChange('gen-http2', this.value)">
+            <span class="fault-display" id="fault-disp-gen-http2">0%</span>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-http2"
+                   oninput="onLatencyChange('gen-http2', this.value)">
+            <span class="fault-display" id="lat-disp-gen-http2">0ms</span>
+          </div>
+          <div class="packets-count" id="meas-gen-http2">-</div>
+        </div>
 
-  <!-- Attacker's View -->
-  <section>
-    <div class="section-label">Attacker's View (Passive Traffic Analysis)</div>
-    <div class="gen-table">
-      <div class="gen-header" style="grid-template-columns: 110px 100px 110px 70px 1fr;">
-        <div>Protocol</div>
-        <div>Packet Size</div>
-        <div>Interval</div>
-        <div>Latency</div>
-        <div>Fingerprint Note</div>
+        <!-- QUIC -->
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
+          <div class="gen-name"><div class="dot" id="dot-fault-gen-quic"></div>QUIC</div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-quic"
+                   oninput="onFaultChange('gen-quic', this.value)">
+            <span class="fault-display" id="fault-disp-gen-quic">0%</span>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-quic"
+                   oninput="onLatencyChange('gen-quic', this.value)">
+            <span class="fault-display" id="lat-disp-gen-quic">0ms</span>
+          </div>
+          <div class="packets-count" id="meas-gen-quic">-</div>
+        </div>
+
+        <!-- MQTT -->
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
+          <div class="gen-name"><div class="dot" id="dot-fault-gen-mqtt"></div>MQTT</div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-mqtt"
+                   oninput="onFaultChange('gen-mqtt', this.value)">
+            <span class="fault-display" id="fault-disp-gen-mqtt">0%</span>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-mqtt"
+                   oninput="onLatencyChange('gen-mqtt', this.value)">
+            <span class="fault-display" id="lat-disp-gen-mqtt">0ms</span>
+          </div>
+          <div class="packets-count" id="meas-gen-mqtt">-</div>
+        </div>
+
+        <!-- TCP/UDP -->
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 110px 1fr 1fr 70px;">
+          <div class="gen-name"><div class="dot" id="dot-fault-gen-tcpudp"></div>TCP/UDP</div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="1" value="0" id="fault-gen-tcpudp"
+                   oninput="onFaultChange('gen-tcpudp', this.value)">
+            <span class="fault-display" id="fault-disp-gen-tcpudp">0%</span>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="10" value="0" id="lat-gen-tcpudp"
+                   oninput="onLatencyChange('gen-tcpudp', this.value)">
+            <span class="fault-display" id="lat-disp-gen-tcpudp">0ms</span>
+          </div>
+          <div class="packets-count" id="meas-gen-tcpudp">-</div>
+        </div>
+
       </div>
-      <div id="attacker-rows"></div>
-    </div>
-    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Shows what a passive observer (e.g. running Wireshark on the wire) could infer
-      without decryption, based solely on packet size, timing, and protocol metadata.
-      This is the basis for <strong>Task 3 (Behavioral Fingerprinting)</strong>.
-    </div>
-  </section>
+    </section>
 
-  <!-- Log -->
-  <section>
-    <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
-      System Log
-      <button class="btn btn-sm" onclick="clearLog()" style="text-transform:none;font-weight:400">Clear</button>
-    </div>
-    <div class="log-box" id="log-box">
-      <div class="log-inner" id="log-inner">
-        <div class="log-line"><span class="log-time">-</span><span class="log-msg">Waiting for connection to the controller...</span></div>
+  </div><!-- /tab-faults -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 4: ANALYSIS                                                        -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-analysis">
+
+    <section>
+      <div class="section-row">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="section-label" style="margin-bottom:0">Attacker's View: Passive Traffic Analysis</span>
+          <i class="info-icon" data-tip="What a passive observer (e.g. Wireshark on the wire) could infer without decryption, based solely on packet size, timing, and protocol metadata. Basis for Task 3 (Behavioral Fingerprinting).">i</i>
+        </div>
       </div>
-    </div>
-  </section>
+      <div class="gen-table">
+        <div class="gen-header" style="grid-template-columns: 90px 80px 90px 60px 180px 1fr;">
+          <div>Protocol</div>
+          <div>Size</div>
+          <div>Interval</div>
+          <div>Latency</div>
+          <div>Wireshark Filter</div>
+          <div>IO Graph pattern + tags</div>
+        </div>
+        <div id="attacker-rows"></div>
+      </div>
+    </section>
 
-  <!-- Footer -->
-  <div class="footer-meta">
-    <span>Controller <span id="ctrl-url">localhost:8000</span></span>
-    <span>Last update <span id="last-update">-</span></span>
-    <span>Uptime <span id="uptime-footer">-</span></span>
-  </div>
+  </div><!-- /tab-analysis -->
 
 </main>
 
@@ -1072,6 +1219,24 @@
   const API = 'http://localhost:8000';
   let pollInterval = null;
   let seenLogCount = 0;
+
+  // ── Tab switching ─────────────────────────────────────────────────────────
+
+  function showTab(name) {
+    ['overview','protocols','faults','analysis'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('active', t === name);
+      document.getElementById('tabbtn-' + t).classList.toggle('active', t === name);
+    });
+  }
+
+  function showProtoTab(name) {
+    ['http2','quic','mqtt','tcpudp'].forEach(t => {
+      document.getElementById('ptab-' + t).classList.toggle('active', t === name);
+      document.getElementById('ptabbtn-' + t).classList.toggle('active', t === name);
+    });
+  }
+
+  // ── Data ──────────────────────────────────────────────────────────────────
 
   const PHASE_DESCRIPTIONS = {
     http2_dominant:        'HTTP/2 GET/POST dominates, MQTT and TCP are minimal; protocol hierarchy baseline.',
@@ -1087,6 +1252,11 @@
     cooldown:              'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops.',
   };
 
+  // Canvas colors for perf charts (CSS vars cannot be used in Canvas 2D API)
+  const COLOR_RATE    = '#0969da';
+  const COLOR_LATENCY = '#9a6700';
+  const COLOR_EMPTY   = '#9198a1';
+
   const PROTOCOL_LABELS = {
     'gen-http2':  'HTTP/2',
     'gen-quic':   'QUIC',
@@ -1100,42 +1270,190 @@
     hold: '- held',
   };
 
-  // Mirrors the --accent / --orange / --text-light CSS variables; canvas 2D
-  // fillStyle/strokeStyle cannot resolve var(...) so the hex values are
-  // duplicated here.
-  const COLOR_RATE    = '#0969da';
-  const COLOR_LATENCY = '#9a6700';
-  const COLOR_EMPTY   = '#9198a1';
+  // ── Live sparkline state ──────────────────────────────────────────────────
 
-  // What a passive observer (attacker on the wire) could infer per protocol,
-  // based on the generator's current live configuration.
-  const FINGERPRINT_NOTES = {
-    'gen-http2': (g) => `TLS/ALPN "h2" on port 443, ${g.concurrent_streams ?? '?'} parallel streams per ` +
-      `connection; multiplexing produces characteristic bursts of equally sized packets (${g.payload_size ?? '?'} B).`,
-    'gen-quic': (g) => `QUIC/HTTP3 over UDP/443, ${g.stream_count ?? '?'} stream(s), 1-RTT handshake per ` +
-      `request; a fixed connection ID and constant packet size (${g.payload_size ?? '?'} B) are recognizable.`,
+  const GEN_NAMES    = ['gen-http2','gen-quic','gen-mqtt','gen-tcpudp'];
+  const SP_POINTS    = 45;   // 45 × 2s poll = 90s rolling window
+  const SP_HISTORY   = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+  const SP_PREV_PKTS = {};
+
+  // Client-side perf history (rate_bps + latency_ms per poll, max 150 points = ~5 min)
+  const PERF_MAX     = 150;
+  const PERF_RATE    = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+  const PERF_LAT     = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+
+  function pushPerfData(gens) {
+    GEN_NAMES.forEach(name => {
+      const g = gens[name] || {};
+      if (g.rate_bps    !== undefined) {
+        PERF_RATE[name].push(g.rate_bps);
+        if (PERF_RATE[name].length > PERF_MAX) PERF_RATE[name].shift();
+      }
+      if (g.latency_ms  !== undefined && g.latency_ms !== null) {
+        PERF_LAT[name].push(g.latency_ms);
+        if (PERF_LAT[name].length > PERF_MAX) PERF_LAT[name].shift();
+      }
+    });
+  }
+
+  const SP_COLORS = {
+    'gen-http2':  '#0969da',
+    'gen-quic':   '#8250df',
+    'gen-mqtt':   '#1a7f37',
+    'gen-tcpudp': '#cf222e',
+  };
+
+  function pushSparklineData(gens) {
+    GEN_NAMES.forEach(name => {
+      const g       = gens[name] || {};
+      const current = g.packets_sent || 0;
+      // On first poll or after a reset, initialise without a fake spike.
+      const prev    = SP_PREV_PKTS[name] ?? current;
+      const delta   = Math.max(0, current - prev);
+      SP_PREV_PKTS[name] = current;
+      SP_HISTORY[name].push(delta);
+      if (SP_HISTORY[name].length > SP_POINTS) SP_HISTORY[name].shift();
+    });
+  }
+
+  function spGlobalMax() {
+    const all = Object.values(SP_HISTORY).flat();
+    return Math.max(1, ...all);
+  }
+
+  // Map a history value to an SVG y-coordinate.
+  // Recent data is pinned to the right edge; older data fills leftward.
+  function spPoint(history, i, max, W, H) {
+    const x = W - ((history.length - 1 - i) / (SP_POINTS - 1)) * W;
+    const y = (H - 3) - (history[i] / max) * (H - 6);
+    return { x: Math.max(0, Math.min(W, x)), y: Math.max(1, y) };
+  }
+
+  function generateSparkline(name) {
+    const W = 96, H = 32;
+    const c       = SP_COLORS[name] || '#656d76';
+    const history = SP_HISTORY[name] || [];
+    const max     = spGlobalMax();
+    const baseY   = H - 1;
+
+    const baseline = `<line x1="0" y1="${baseY}" x2="${W}" y2="${baseY}" stroke="#e8ecf0" stroke-width="1"/>`;
+
+    // Not enough data yet. Draw a muted flat zero line.
+    if (history.length < 2) {
+      return `<svg width="${W}" height="${H}" style="display:block;flex-shrink:0">` +
+        `${baseline}<line x1="0" y1="${baseY}" x2="${W}" y2="${baseY}" stroke="${c}" stroke-width="1.5" opacity="0.2"/></svg>`;
+    }
+
+    const points = history.map((_, i) => spPoint(history, i, max, W, H));
+
+    const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+    const first = points[0], last = points[points.length - 1];
+    const area  = `M ${first.x.toFixed(1)},${baseY} ` +
+      points.map(p => `L ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+      ` L ${last.x.toFixed(1)},${baseY} Z`;
+
+    // Dot on the current (rightmost) value.
+    const dot = `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="2" fill="${c}"/>`;
+
+    return `<svg width="${W}" height="${H}" style="display:block;flex-shrink:0">` +
+      `${baseline}` +
+      `<path d="${area}" fill="${c}" opacity="0.10"/>` +
+      `<polyline points="${polyline}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round"/>` +
+      `${dot}</svg>`;
+  }
+
+  function generateTags(name, g) {
+    const t = (text, bg, bc, tc) =>
+      `<span style="font-size:10px;font-family:var(--font);padding:1px 6px;border-radius:3px;` +
+      `border:1px solid ${bc};background:${bg};color:${tc};white-space:nowrap">${text}</span>`;
+
+    const tags = [];
+    const pattern = g.pattern || 'constant';
+    const stealth = g.mode === 'stealth';
+
+    if (name === 'gen-http2') {
+      tags.push(t('TCP / 8080',    '#dbeafe','#93c5fd','#1d4ed8'));
+      tags.push(t('TLS + ALPN h2', '#f0fdf4','#86efac','#166534'));
+      tags.push(t((g.concurrent_streams || 1) > 1 ? 'multiplexed' : 'single stream', '#fef9c3','#fde047','#713f12'));
+    } else if (name === 'gen-quic') {
+      tags.push(t('UDP / 4433',   '#ede9fe','#c4b5fd','#5b21b6'));
+      tags.push(t('QUIC + TLS',   '#f0fdf4','#86efac','#166534'));
+      tags.push(t('no retransmits','#fef9c3','#fde047','#713f12'));
+    } else if (name === 'gen-mqtt') {
+      tags.push(t('TCP / 1883',      '#dbeafe','#93c5fd','#1d4ed8'));
+      tags.push(t('plaintext topics','#fee2e2','#fca5a5','#991b1b'));
+      const qos = g.qos_distribution && g.qos_distribution[2] > 0 ? 2
+                : g.qos_distribution && g.qos_distribution[1] > 0 ? 1
+                : (g.qos ?? 1);
+      const qosColors = [
+        ['#f0fdf4','#86efac','#166534'],
+        ['#fef9c3','#fde047','#713f12'],
+        ['#fee2e2','#fca5a5','#991b1b'],
+      ][qos] || ['#fef9c3','#fde047','#713f12'];
+      tags.push(t(`QoS ${qos}`, qosColors[0], qosColors[1], qosColors[2]));
+    } else if (name === 'gen-tcpudp') {
+      tags.push(t('TCP + UDP / 9999', '#dbeafe','#93c5fd','#1d4ed8'));
+      tags.push(t(stealth ? 'variable size' : 'fixed size', stealth ? '#1f2328':'#f6f8fa', stealth ? '#1f2328':'#d0d7de', stealth ? '#fff':'#656d76'));
+    }
+
+    // Pattern tag
+    const pLabel = { constant: 'constant', periodic_burst: 'periodic burst', random: 'Poisson' }[pattern] || pattern;
+    const pStealth = stealth && pattern === 'random';
+    if (pStealth) {
+      tags.push(t('stealth Poisson', '#1f2328','#1f2328','#fff'));
+    } else {
+      tags.push(t(pLabel, '#f6f8fa','#d0d7de','#656d76'));
+    }
+
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:5px">${tags.join('')}</div>`;
+  }
+
+  const PROTOCOL_FILTERS = {
+    'gen-http2':  'http2 and tcp.port==8080',
+    'gen-quic':   'udp.port==4433',
+    'gen-mqtt':   'mqtt and tcp.port==1883',
+    'gen-tcpudp': 'tcp.port==9999 or udp.port==9999',
+  };
+
+  const PROTOCOL_SIGNATURES = {
+    'gen-http2': (g) => {
+      const streams = g.concurrent_streams ?? '?';
+      const size    = g.payload_size ?? '?';
+      return `DATA frames arrive in clusters of ${streams}. Same ${size} B payload per cluster. ` +
+        `The HEADERS+DATA pattern repeats at a fixed rate. Looks like a flat sawtooth in the IO graph.`;
+    },
+    'gen-quic': (g) => {
+      const size    = g.payload_size ?? '?';
+      const streams = g.stream_count ?? '?';
+      const rtt     = (g.use_0rtt && g.zero_rtt_used) ? '0-RTT (no handshake visible)' : '1-RTT handshake on each connect';
+      return `Short-header packets after the initial handshake (${rtt}). ` +
+        `Fixed ${size} B payload, ${streams} stream${streams !== 1 ? 's' : ''}. ` +
+        `No TCP retransmits. QUIC handles recovery itself.`;
+    },
     'gen-mqtt': (g) => {
-      const dist = g.qos_distribution;
-      const qosNote = (dist && dist.some(w => w > 0))
-        ? `mixed QoS (weights ${dist.join('/')})`
+      const dist    = g.qos_distribution;
+      const hasWt   = dist && dist.some(w => w > 0);
+      const qosNote = hasWt
+        ? `mixed QoS 0/1/2 (weights ${dist.join('/')})`
         : `QoS ${g.qos ?? '?'}`;
-      return `MQTT over TCP/1883, ${qosNote} across ${g.topic_count ?? '?'} topics; regular PUBLISH packets ` +
-        `plus ACK handshakes for QoS 1/2, topic names often in plaintext. This generator also subscribes, ` +
-        `so the broker's fan-out (PUBLISH back to subscriber) is visible too.`;
+      const fanout  = `The generator also subscribes, so the broker echoes every PUBLISH back. That gives two packet streams for one sender.`;
+      if ((g.qos ?? 0) >= 2 || (hasWt && dist[2] > 0)) {
+        return `${qosNote} across ${g.topic_count ?? '?'} topics. Each message triggers a 4-way ACK handshake (PUBLISH, PUBREC, PUBREL, PUBCOMP). Topic strings appear in plaintext. ${fanout}`;
+      }
+      return `${qosNote} across ${g.topic_count ?? '?'} topics. PUBLISH frames followed by PUBACK for QoS 1, or fire-and-forget for QoS 0. Topic strings appear in plaintext. ${fanout}`;
     },
     'gen-tcpudp': (g) => {
-      const sizeNote = g.mode === 'stealth'
-        ? 'variable packet size'
-        : 'fixed packet size';
-      const patternNote = {
-        constant:       'fixed send intervals (constant rate)',
-        periodic_burst: `periodic bursts of ${g.burst_size ?? '?'} packets every ${Math.round((g.burst_interval ?? 0) * 1000)}ms`,
-        random:         'Poisson-distributed (random) intervals',
-      }[g.pattern] || 'fixed send intervals (constant rate)';
-      return `${sizeNote} with ${patternNote}` +
-        (g.mode === 'stealth' && g.pattern === 'random'
-          ? '; resembles real user traffic, statistically hard to distinguish from background noise.'
-          : '; produces a recognizable statistical fingerprint.');
+      if (g.mode === 'stealth' && g.pattern === 'random') {
+        return `Variable size (${g.min_size ?? '?'} to ${g.max_size ?? '?'} B), Poisson-distributed timing. ` +
+          `The IO graph looks like background noise. Hard to distinguish without deep inspection.`;
+      }
+      if (g.pattern === 'periodic_burst') {
+        return `Bursts of ${g.burst_size ?? '?'} back-to-back packets every ${Math.round((g.burst_interval ?? 0) * 1000)} ms. ` +
+          `The IO graph shows a repeating spike pattern. Easy to spot.`;
+      }
+      return `Fixed ${g.packet_size ?? '?'} B packets at a constant rate. ` +
+        `The IO graph is a flat line. One of the easiest fingerprints to spot.`;
     },
   };
 
@@ -1148,8 +1466,8 @@
 
   function fmtBytes(b) {
     if (!b) return '0 B/s';
-    if (b < 1024)       return b + ' B/s';
-    if (b < 1048576)    return (b / 1024).toFixed(1) + ' KB/s';
+    if (b < 1024)    return b + ' B/s';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB/s';
     return (b / 1048576).toFixed(1) + ' MB/s';
   }
 
@@ -1173,7 +1491,6 @@
     line.className = 'log-line ' + level;
     line.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
     inner.appendChild(line);
-    // keep last 100 lines
     while (inner.children.length > 100) inner.removeChild(inner.firstChild);
     const box = document.getElementById('log-box');
     box.scrollTop = box.scrollHeight;
@@ -1193,7 +1510,7 @@
       hideError();
       renderStatus(data);
     } catch (e) {
-      showError('Controller unreachable; is docker-compose up running?');
+      showError('Controller unreachable. Is docker-compose up running?');
       setSystemStatus(false, 'Offline');
     }
   }
@@ -1202,13 +1519,13 @@
     const running = data.running;
     setSystemStatus(running, running ? 'Running' : 'Stopped');
 
-    // active phase (warmup/cooldown ramps show live progress)
+    // active phase
     const phaseEl = document.getElementById('active-phase');
     const ramp = data.ramp_status;
     if (ramp && (data.active_phase === 'warmup' || data.active_phase === 'cooldown')) {
-      const pct = Math.round(ramp.progress * 100);
+      const pct   = Math.round(ramp.progress * 100);
       const label = ramp.phase === 'warmup' ? 'Warmup' : 'Cooldown';
-      phaseEl.textContent = `Phase: ${label} - rates ramping ${ramp.phase === 'warmup' ? 'up' : 'down'} (${pct}%)`;
+      phaseEl.textContent = `Phase: ${label} (${ramp.phase === 'warmup' ? 'up' : 'down'}, ${pct}%)`;
     } else {
       phaseEl.textContent = data.active_phase ? `Phase: ${data.active_phase}` : '';
     }
@@ -1216,22 +1533,18 @@
     const descEl = document.getElementById('phase-desc');
     if (ramp && (data.active_phase === 'warmup' || data.active_phase === 'cooldown')) {
       descEl.textContent = ramp.phase === 'warmup'
-        ? 'Global warmup period: all configured rates are linearly ramped from 0 up to the first phase\'s target values - this "ramp" sending pattern is visible as a rising slope in Wireshark I/O graphs.'
-        : 'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops - visible as a falling slope in Wireshark I/O graphs.';
+        ? 'Warmup: all rates ramp from 0 to the first phase targets. Visible as a rising slope in the Wireshark IO graph.'
+        : 'Cooldown: all rates ramp back to 0. Visible as a falling slope in the Wireshark IO graph.';
     } else {
-      descEl.textContent = data.active_phase
-        ? (PHASE_DESCRIPTIONS[data.active_phase] || '')
-        : '';
+      descEl.textContent = data.active_phase ? (PHASE_DESCRIPTIONS[data.active_phase] || '') : '';
     }
 
-    // profile buttons highlight
+    // profile buttons
     ['http2_heavy','mqtt_heavy','balanced'].forEach(p => {
-      document.getElementById('prof-' + p).classList.toggle(
-        'active', data.active_profile === p
-      );
+      document.getElementById('prof-' + p).classList.toggle('active', data.active_profile === p);
     });
 
-    // KPIs from metrics
+    // KPIs
     const m = data.metrics || {};
     document.getElementById('kpi-packets').textContent = fmtNum(m.total_packets);
     document.getElementById('kpi-rate').textContent    = fmtBytes(m.rate_bps);
@@ -1248,7 +1561,7 @@
     document.getElementById('uptime-footer').textContent = fmtUptime(m.uptime_seconds);
     document.getElementById('last-update').textContent   = now();
 
-    // Per-generator rows
+    // Per-generator
     ['gen-http2','gen-quic','gen-mqtt','gen-tcpudp'].forEach(name => {
       const g = gens[name] || {};
       const isOn = !!g.running;
@@ -1257,36 +1570,29 @@
       document.getElementById('pkts-' + name).textContent = fmtNum(g.packets_sent);
       document.getElementById('err-' + name).textContent  = fmtNum(g.errors);
 
-      // sync toggle (only if user isn't dragging)
       const chk = document.getElementById('toggle-' + name);
       if (document.activeElement !== chk) chk.checked = isOn;
 
-      // sync rate slider
       if (g.rate !== undefined) {
         const slider = document.getElementById('range-' + name);
         const disp   = document.getElementById('rate-' + name);
         if (document.activeElement !== slider) {
-          slider.value  = g.rate;
+          slider.value = g.rate;
           disp.textContent = g.rate;
         }
       }
 
-      // sync mode for tcpudp
       if (name === 'gen-tcpudp' && g.mode) {
         const sel = document.getElementById('mode-gen-tcpudp');
         if (document.activeElement !== sel) sel.value = g.mode;
       }
 
-      // sync fault-injection sliders
       document.getElementById('dot-fault-' + name).className = 'dot ' + (isOn ? 'on' : 'off');
 
       if (g.fault_rate !== undefined) {
         const fSlider = document.getElementById('fault-' + name);
         const fDisp   = document.getElementById('fault-disp-' + name);
         const pct     = Math.round(g.fault_rate * 100);
-        // Only sync the slider AND its display label from server state while the
-        // user isn't actively dragging it. Otherwise the label briefly flashes
-        // back to the old (stale) server value before the debounced PATCH lands.
         if (document.activeElement !== fSlider) {
           fSlider.value = pct;
           fDisp.textContent = pct + '%';
@@ -1305,7 +1611,6 @@
         }
       }
 
-      // measured latency (incl. injected extra latency)
       const measEl = document.getElementById('meas-' + name);
       if (measEl) {
         measEl.textContent = (g.latency_ms !== undefined && g.latency_ms !== null)
@@ -1314,79 +1619,51 @@
       }
     });
 
-    // HTTP/2-specific generator settings (payload size, method mix,
-    // concurrent streams, GET/POST target paths)
+    // HTTP/2 settings sync
     const h2 = gens['gen-http2'] || {};
 
     if (h2.payload_size !== undefined) {
-      const el   = document.getElementById('payload-gen-http2');
+      const el = document.getElementById('payload-gen-http2');
       const disp = document.getElementById('payload-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.payload_size;
-        disp.textContent = `${fmtNum(h2.payload_size)} B`;
-      }
+      if (document.activeElement !== el) { el.value = h2.payload_size; disp.textContent = `${fmtNum(h2.payload_size)} B`; }
     }
-
     if (h2.method_get_pct !== undefined) {
-      const el   = document.getElementById('methodmix-gen-http2');
+      const el = document.getElementById('methodmix-gen-http2');
       const disp = document.getElementById('methodmix-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.method_get_pct;
-        disp.textContent = `${h2.method_get_pct}% GET`;
-      }
+      if (document.activeElement !== el) { el.value = h2.method_get_pct; disp.textContent = `${h2.method_get_pct}% GET`; }
     }
-
     if (h2.concurrent_streams !== undefined) {
-      const el   = document.getElementById('streams-gen-http2');
+      const el = document.getElementById('streams-gen-http2');
       const disp = document.getElementById('streams-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.concurrent_streams;
-        disp.textContent = h2.concurrent_streams;
-      }
+      if (document.activeElement !== el) { el.value = h2.concurrent_streams; disp.textContent = h2.concurrent_streams; }
     }
-
     if (h2.get_paths !== undefined) {
       const el = document.getElementById('getpaths-gen-http2');
       if (document.activeElement !== el) el.value = h2.get_paths.join(', ');
     }
-
     if (h2.post_paths !== undefined) {
       const el = document.getElementById('postpaths-gen-http2');
       if (document.activeElement !== el) el.value = h2.post_paths.join(', ');
     }
-
     if (h2.pattern !== undefined) {
       const el = document.getElementById('pattern-gen-http2');
       if (document.activeElement !== el) el.value = h2.pattern;
     }
-
     if (h2.burst_rate !== undefined) {
-      const el   = document.getElementById('burstrate-gen-http2');
+      const el = document.getElementById('burstrate-gen-http2');
       const disp = document.getElementById('burstrate-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.burst_rate;
-        disp.textContent = `${fmtNum(h2.burst_rate)} req/s`;
-      }
+      if (document.activeElement !== el) { el.value = h2.burst_rate; disp.textContent = `${fmtNum(h2.burst_rate)} req/s`; }
     }
-
     if (h2.burst_duration !== undefined) {
-      const el   = document.getElementById('burstduration-gen-http2');
+      const el = document.getElementById('burstduration-gen-http2');
       const disp = document.getElementById('burstduration-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.burst_duration;
-        disp.textContent = `${h2.burst_duration}s`;
-      }
+      if (document.activeElement !== el) { el.value = h2.burst_duration; disp.textContent = `${h2.burst_duration}s`; }
     }
-
     if (h2.burst_interval !== undefined) {
-      const el   = document.getElementById('burstinterval-gen-http2');
+      const el = document.getElementById('burstinterval-gen-http2');
       const disp = document.getElementById('burstinterval-disp-gen-http2');
-      if (document.activeElement !== el) {
-        el.value = h2.burst_interval;
-        disp.textContent = `${h2.burst_interval}s`;
-      }
+      if (document.activeElement !== el) { el.value = h2.burst_interval; disp.textContent = `${h2.burst_interval}s`; }
     }
-
     if (h2.burst_active !== undefined) {
       const disp = document.getElementById('burstactive-disp-gen-http2');
       if (disp) {
@@ -1395,55 +1672,39 @@
       }
     }
 
-    // QUIC-specific generator settings (payload size, stream count, 0-RTT)
+    // QUIC settings sync
     const quic = gens['gen-quic'] || {};
-
     if (quic.payload_size !== undefined) {
-      const el   = document.getElementById('payload-gen-quic');
+      const el = document.getElementById('payload-gen-quic');
       const disp = document.getElementById('payload-disp-gen-quic');
-      if (document.activeElement !== el) {
-        el.value = quic.payload_size;
-        disp.textContent = `${fmtNum(quic.payload_size)} B`;
-      }
+      if (document.activeElement !== el) { el.value = quic.payload_size; disp.textContent = `${fmtNum(quic.payload_size)} B`; }
     }
-
     if (quic.stream_count !== undefined) {
-      const el   = document.getElementById('streams-gen-quic');
+      const el = document.getElementById('streams-gen-quic');
       const disp = document.getElementById('streams-disp-gen-quic');
-      if (document.activeElement !== el) {
-        el.value = quic.stream_count;
-        disp.textContent = quic.stream_count;
-      }
+      if (document.activeElement !== el) { el.value = quic.stream_count; disp.textContent = quic.stream_count; }
     }
-
     if (quic.use_0rtt !== undefined) {
       const el = document.getElementById('zerortt-gen-quic');
       if (document.activeElement !== el) el.checked = quic.use_0rtt;
     }
-
     if (quic.zero_rtt_used !== undefined) {
       const disp = document.getElementById('zerortt-disp-gen-quic');
       disp.textContent = quic.zero_rtt_used ? 'used ✓' : 'not used';
       disp.style.color = quic.zero_rtt_used ? 'var(--green)' : 'var(--text-muted)';
     }
-
     if (quic.pattern !== undefined) {
       const el = document.getElementById('pattern-gen-quic');
       if (document.activeElement !== el) el.value = quic.pattern;
     }
 
-    // MQTT-specific generator settings (topic count, QoS distribution, received stats)
+    // MQTT settings sync
     const mqttG = gens['gen-mqtt'] || {};
-
     if (mqttG.topic_count !== undefined) {
-      const el   = document.getElementById('topics-gen-mqtt');
+      const el = document.getElementById('topics-gen-mqtt');
       const disp = document.getElementById('topics-disp-gen-mqtt');
-      if (document.activeElement !== el) {
-        el.value = mqttG.topic_count;
-        disp.textContent = mqttG.topic_count;
-      }
+      if (document.activeElement !== el) { el.value = mqttG.topic_count; disp.textContent = mqttG.topic_count; }
     }
-
     if (mqttG.qos_distribution !== undefined) {
       const dist = mqttG.qos_distribution || [0, 0, 0];
       ['qos0', 'qos1', 'qos2'].forEach((id, i) => {
@@ -1451,86 +1712,61 @@
         if (el && document.activeElement !== el) el.value = dist[i] ?? 0;
       });
     }
-
     if (mqttG.messages_received !== undefined || mqttG.bytes_received !== undefined) {
       const disp = document.getElementById('mqtt-received-gen-mqtt');
-      if (disp) {
-        disp.textContent = `${fmtNum(mqttG.messages_received || 0)} msgs / ${fmtNum(mqttG.bytes_received || 0)} B`;
-      }
+      if (disp) disp.textContent = `${fmtNum(mqttG.messages_received || 0)} msgs / ${fmtNum(mqttG.bytes_received || 0)} B`;
     }
-
     if (mqttG.pattern !== undefined) {
       const el = document.getElementById('pattern-gen-mqtt');
       if (document.activeElement !== el) el.value = mqttG.pattern;
     }
 
-    // TCP/UDP-specific generator settings (sending pattern, burst size/interval)
+    // TCP/UDP settings sync
     const tcpudpG = gens['gen-tcpudp'] || {};
-
     if (tcpudpG.pattern !== undefined) {
       const el = document.getElementById('pattern-gen-tcpudp');
       if (document.activeElement !== el) el.value = tcpudpG.pattern;
     }
-
     if (tcpudpG.burst_size !== undefined) {
-      const el   = document.getElementById('burstsize-gen-tcpudp');
+      const el = document.getElementById('burstsize-gen-tcpudp');
       const disp = document.getElementById('burstsize-disp-gen-tcpudp');
-      if (document.activeElement !== el) {
-        el.value = tcpudpG.burst_size;
-        disp.textContent = tcpudpG.burst_size;
-      }
+      if (document.activeElement !== el) { el.value = tcpudpG.burst_size; disp.textContent = tcpudpG.burst_size; }
     }
-
     if (tcpudpG.burst_interval !== undefined) {
-      const el   = document.getElementById('burstinterval-gen-tcpudp');
+      const el = document.getElementById('burstinterval-gen-tcpudp');
       const disp = document.getElementById('burstinterval-disp-gen-tcpudp');
-      const ms   = Math.round(tcpudpG.burst_interval * 1000);
-      if (document.activeElement !== el) {
-        el.value = ms;
-        disp.textContent = ms + 'ms';
-      }
+      const ms = Math.round(tcpudpG.burst_interval * 1000);
+      if (document.activeElement !== el) { el.value = ms; disp.textContent = ms + 'ms'; }
     }
 
-    // Live performance sparklines
     renderPerf(data);
-
-    // Adaptive Control
     renderAdaptive(data);
-
-    // Attacker's view
+    pushSparklineData(data.generators || {});
     renderAttacker(data);
 
-    // new log entries
     const log = data.log || [];
     const newEntries = log.slice(seenLogCount);
     newEntries.forEach(e => addLog(e.time, e.message, e.level || 'info'));
     seenLogCount = log.length;
   }
 
-  // Draws a single-series sparkline (line + faint fill) into `canvas`, scaled
-  // to that series' own min/max so it stays readable regardless of the
-  // absolute magnitude (bytes/sec vs. milliseconds).
   function drawSparkline(canvas, values, color) {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-
     if (!values || values.length === 0) {
       ctx.fillStyle = COLOR_EMPTY;
       ctx.font = '11px sans-serif';
       ctx.fillText('No data yet', 6, h / 2 + 4);
       return;
     }
-
     const pad   = 3;
     const min   = Math.min(...values);
     const max   = Math.max(...values);
-    const range = (max - min) || 1; // flat series: avoid divide-by-zero, draw a flat mid-line
+    const range = (max - min) || 1;
     const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
-
     const xAt = i => pad + i * stepX;
     const yAt = v => h - pad - ((v - min) / range) * (h - pad * 2);
-
     ctx.beginPath();
     values.forEach((v, i) => {
       const x = xAt(i), y = yAt(v);
@@ -1540,26 +1776,22 @@
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
     ctx.stroke();
-
-    // Faint fill under the line for legibility at a glance.
     ctx.lineTo(xAt(values.length - 1), h - pad);
     ctx.lineTo(xAt(0), h - pad);
     ctx.closePath();
-    ctx.fillStyle = color + '1a'; // ~10% alpha (8-digit hex)
+    ctx.fillStyle = color + '1a';
     ctx.fill();
   }
 
   function renderPerf(data) {
     const gens = data.generators || {};
-    ['gen-http2', 'gen-quic', 'gen-mqtt', 'gen-tcpudp'].forEach(name => {
-      const g    = gens[name] || {};
-      const hist = g.history || [];
-
+    pushPerfData(gens);
+    GEN_NAMES.forEach(name => {
+      const g = gens[name] || {};
       const rateCanvas = document.getElementById('perf-rate-' + name);
       const latCanvas  = document.getElementById('perf-lat-' + name);
-      if (rateCanvas) drawSparkline(rateCanvas, hist.map(p => p.rate_bps), COLOR_RATE);
-      if (latCanvas)  drawSparkline(latCanvas,  hist.map(p => p.latency_ms), COLOR_LATENCY);
-
+      if (rateCanvas) drawSparkline(rateCanvas, PERF_RATE[name], COLOR_RATE);
+      if (latCanvas)  drawSparkline(latCanvas,  PERF_LAT[name],  COLOR_LATENCY);
       const rateNow = document.getElementById('perf-rate-now-' + name);
       const latNow  = document.getElementById('perf-lat-now-' + name);
       if (rateNow) rateNow.textContent = (g.rate_bps !== undefined) ? fmtBytes(g.rate_bps) : '-';
@@ -1569,12 +1801,12 @@
   }
 
   function renderAdaptive(data) {
-    const enabled  = !!data.adaptive_enabled;
-    const toggle   = document.getElementById('toggle-adaptive');
-    const label    = document.getElementById('adaptive-label');
-    const table    = document.getElementById('adaptive-table');
-    const empty    = document.getElementById('adaptive-empty');
-    const rowsEl   = document.getElementById('adaptive-rows');
+    const enabled = !!data.adaptive_enabled;
+    const toggle  = document.getElementById('toggle-adaptive');
+    const label   = document.getElementById('adaptive-label');
+    const table   = document.getElementById('adaptive-table');
+    const empty   = document.getElementById('adaptive-empty');
+    const rowsEl  = document.getElementById('adaptive-rows');
 
     if (document.activeElement !== toggle) toggle.checked = enabled;
     label.textContent = enabled ? 'On' : 'Off';
@@ -1585,27 +1817,20 @@
     table.style.display = hasRows ? '' : 'none';
     empty.style.display = hasRows ? 'none' : '';
     if (!enabled) {
-      empty.textContent = 'Inactive. While disabled, the controller does not change any rates automatically. ' +
-        'When enabled, it periodically checks each generator\'s live error rate (and latency, where reported) ' +
-        'and scales its rate up or down accordingly, with no manual intervention required. This is also ' +
-        'enabled automatically during the balanced_adaptive profile phase.';
+      empty.textContent = 'Inactive. No rates are changed automatically while disabled.';
     } else if (!hasRows) {
       empty.textContent = 'Active. Waiting for the first evaluation (check_interval)...';
     }
 
     if (hasRows) {
       rowsEl.innerHTML = Object.entries(status).map(([name, s]) => {
-        const label    = PROTOCOL_LABELS[name] || name;
-        const errPct   = (s.error_rate !== undefined) ? (s.error_rate * 100).toFixed(1) + '%' : '-';
-        const mult     = (s.multiplier !== undefined) ? 'x' + Number(s.multiplier).toFixed(2) : '-';
-        const applied  = s.applied ? JSON.stringify(s.applied) : '-';
-        const action   = ACTION_LABELS[s.action] || s.action || '-';
+        const lbl    = PROTOCOL_LABELS[name] || name;
+        const errPct = (s.error_rate !== undefined) ? (s.error_rate * 100).toFixed(1) + '%' : '-';
+        const mult   = (s.multiplier !== undefined) ? 'x' + Number(s.multiplier).toFixed(2) : '-';
+        const applied = s.applied ? JSON.stringify(s.applied) : '-';
+        const action  = ACTION_LABELS[s.action] || s.action || '-';
         return `<div class="gen-row" style="grid-template-columns: 110px 100px 90px 1fr 90px;">
-          <div>${label}</div>
-          <div>${errPct}</div>
-          <div>${mult}</div>
-          <div>${applied}</div>
-          <div>${action}</div>
+          <div>${lbl}</div><div>${errPct}</div><div>${mult}</div><div>${applied}</div><div>${action}</div>
         </div>`;
       }).join('');
     }
@@ -1632,29 +1857,32 @@
       }
 
       const interval = (g.mode === 'stealth')
-        ? `~${Math.round((g.mean_interval || 0) * 1000)} ms (Poisson)`
-        : (rate > 0 ? (1000 / rate).toFixed(0) + ' ms' : '-');
+        ? `~${Math.round((g.mean_interval || 0) * 1000)} ms`
+        : (rate > 0 ? Math.round(1000 / rate) + ' ms' : '-');
 
       const latency = (g.latency_ms !== undefined && g.latency_ms !== null)
         ? Number(g.latency_ms).toFixed(1) + ' ms'
         : '-';
 
-      const note = FINGERPRINT_NOTES[name] ? FINGERPRINT_NOTES[name](g) : '-';
-
-      return `<div class="gen-row gen-row-auto" style="grid-template-columns: 110px 100px 110px 70px 1fr;">
-        <div class="gen-name">${label}</div>
-        <div class="packets-count">${size}</div>
-        <div class="packets-count">${interval}</div>
-        <div class="packets-count">${latency}</div>
-        <div class="fp-note">${note}</div>
+      const filter    = PROTOCOL_FILTERS[name] || '-';
+      const sparkline = generateSparkline(name);
+      return `<div class="gen-row gen-row-auto" style="grid-template-columns: 90px 80px 90px 60px 180px 1fr; align-items: start; padding-top: 12px; padding-bottom: 12px;">
+        <div class="gen-name" style="padding-top:2px">${label}</div>
+        <div class="packets-count" style="padding-top:3px">${size}</div>
+        <div class="packets-count" style="padding-top:3px">${interval}</div>
+        <div class="packets-count" style="padding-top:3px">${latency}</div>
+        <div><code style="font-size:11px;font-family:var(--mono);background:var(--bg-muted);border:1px solid var(--border-muted);border-radius:4px;padding:2px 5px;color:var(--text-muted);word-break:break-all;display:inline-block;line-height:1.5">${filter}</code></div>
+        <div>${sparkline}</div>
       </div>`;
     }).join('');
   }
 
+  // ── Event handlers ────────────────────────────────────────────────────────
+
   let faultTimers = {};
 
   function onFaultChange(name, value) {
-    const pct = parseInt(value);
+    const pct  = parseInt(value);
     const disp = document.getElementById('fault-disp-' + name);
     disp.textContent = pct + '%';
     disp.classList.toggle('active', pct > 0);
@@ -1666,7 +1894,7 @@
   }
 
   function onLatencyChange(name, value) {
-    const ms = parseInt(value);
+    const ms   = parseInt(value);
     const disp = document.getElementById('lat-disp-' + name);
     disp.textContent = ms + 'ms';
     disp.classList.toggle('active', ms > 0);
@@ -1677,71 +1905,61 @@
     }, 400);
   }
 
-  // ── HTTP/2 generator settings (payload, method mix, streams, paths) ────────
-
   function onPayloadChange(name, value) {
     const bytes = parseInt(value);
-    const disp = document.getElementById('payload-disp-' + name);
-    disp.textContent = `${fmtNum(bytes)} B`;
+    document.getElementById('payload-disp-' + name).textContent = `${fmtNum(bytes)} B`;
     clearTimeout(faultTimers[name + '-payload']);
     faultTimers[name + '-payload'] = setTimeout(() => {
       patchGen(name, {payload_size: bytes});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: payload size set to ${bytes} B`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: payload size → ${bytes} B`, 'info');
     }, 400);
   }
 
   function onMethodMixChange(name, value) {
     const pct = parseInt(value);
-    const disp = document.getElementById('methodmix-disp-' + name);
-    disp.textContent = `${pct}% GET`;
+    document.getElementById('methodmix-disp-' + name).textContent = `${pct}% GET`;
     clearTimeout(faultTimers[name + '-methodmix']);
     faultTimers[name + '-methodmix'] = setTimeout(() => {
       patchGen(name, {method_get_pct: pct});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: method mix set to ${pct}% GET / ${100 - pct}% POST`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: method mix → ${pct}% GET / ${100-pct}% POST`, 'info');
     }, 400);
   }
 
   function onStreamsChange(name, value) {
     const n = parseInt(value);
-    const disp = document.getElementById('streams-disp-' + name);
-    disp.textContent = n;
+    document.getElementById('streams-disp-' + name).textContent = n;
     clearTimeout(faultTimers[name + '-streams']);
     faultTimers[name + '-streams'] = setTimeout(() => {
       patchGen(name, {concurrent_streams: n});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: concurrent streams set to ${n}`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: concurrent streams → ${n}`, 'info');
     }, 400);
   }
 
   function onPathsChange(name, field, value) {
     const paths = value.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    if (paths.length === 0) return; // ignore empty input, keep previous config
+    if (paths.length === 0) return;
     patchGen(name, {[field]: paths});
-    const label = field === 'get_paths' ? 'GET' : 'POST';
-    addLog(now(), `${PROTOCOL_LABELS[name] || name}: ${label} paths set to ${paths.join(', ')}`, 'info');
+    addLog(now(), `${PROTOCOL_LABELS[name] || name}: ${field === 'get_paths' ? 'GET' : 'POST'} paths → ${paths.join(', ')}`, 'info');
   }
 
   function onStreamCountChange(name, value) {
     const n = parseInt(value);
-    const disp = document.getElementById('streams-disp-' + name);
-    disp.textContent = n;
+    document.getElementById('streams-disp-' + name).textContent = n;
     clearTimeout(faultTimers[name + '-streams']);
     faultTimers[name + '-streams'] = setTimeout(() => {
       patchGen(name, {stream_count: n});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: stream count set to ${n}`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: stream count → ${n}`, 'info');
     }, 400);
   }
 
   function onZeroRttToggle(name, checked) {
     patchGen(name, {use_0rtt: checked});
-    addLog(now(), `${PROTOCOL_LABELS[name] || name}: 0-RTT session resumption ${checked ? 'enabled' : 'disabled'} ` +
-      `(applies on next reconnect)`, 'info');
+    addLog(now(), `${PROTOCOL_LABELS[name] || name}: 0-RTT ${checked ? 'enabled' : 'disabled'} (applies on next reconnect)`, 'info');
   }
-
-  // ── HTTP/2 generator settings (sending pattern, burst rate/duration/interval) ──
 
   async function onHttp2PatternChange(pattern) {
     await patchGen('gen-http2', {pattern});
-    addLog(now(), `HTTP/2 sending pattern changed: ${pattern}`, 'info');
+    addLog(now(), `HTTP/2 sending pattern → ${pattern}`, 'info');
   }
 
   function onHttp2BurstFieldChange(name, field, value) {
@@ -1751,20 +1969,17 @@
     clearTimeout(faultTimers[name + '-' + field]);
     faultTimers[name + '-' + field] = setTimeout(() => {
       patchGen(name, {[field]: n});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: ${field} set to ${n}`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: ${field} → ${n}`, 'info');
     }, 400);
   }
 
-  // ── MQTT generator settings (topic count, QoS distribution) ────────────────
-
   function onTopicCountChange(name, value) {
     const n = parseInt(value);
-    const disp = document.getElementById('topics-disp-' + name);
-    disp.textContent = n;
+    document.getElementById('topics-disp-' + name).textContent = n;
     clearTimeout(faultTimers[name + '-topics']);
     faultTimers[name + '-topics'] = setTimeout(() => {
       patchGen(name, {topic_count: n});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: topic count set to ${n}`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: topic count → ${n}`, 'info');
     }, 400);
   }
 
@@ -1776,37 +1991,33 @@
     faultTimers[name + '-qosdist'] = setTimeout(() => {
       patchGen(name, {qos_distribution: [w0, w1, w2]});
       const allZero = (w0 + w1 + w2) === 0;
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: QoS distribution set to ` +
-        (allZero ? `[0,0,0] (falls back to fixed QoS)` : `[${w0}, ${w1}, ${w2}]`), 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: QoS distribution → ` +
+        (allZero ? '[0,0,0] (falls back to fixed QoS)' : `[${w0}, ${w1}, ${w2}]`), 'info');
     }, 400);
   }
 
-  // ── Sending pattern (TCP/UDP, QUIC, MQTT) ──────────────────────────────────
-
   async function onPatternChange(name, pattern) {
     await patchGen(name, {pattern});
-    addLog(now(), `${PROTOCOL_LABELS[name] || name}: sending pattern changed to ${pattern}`, 'info');
+    addLog(now(), `${PROTOCOL_LABELS[name] || name}: sending pattern → ${pattern}`, 'info');
   }
 
   function onBurstSizeChange(name, value) {
     const n = parseInt(value);
-    const disp = document.getElementById('burstsize-disp-' + name);
-    disp.textContent = n;
+    document.getElementById('burstsize-disp-' + name).textContent = n;
     clearTimeout(faultTimers[name + '-burstsize']);
     faultTimers[name + '-burstsize'] = setTimeout(() => {
       patchGen(name, {burst_size: n});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: burst size set to ${n}`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: burst size → ${n}`, 'info');
     }, 400);
   }
 
   function onBurstIntervalChange(name, value) {
     const ms = parseInt(value);
-    const disp = document.getElementById('burstinterval-disp-' + name);
-    disp.textContent = ms + 'ms';
+    document.getElementById('burstinterval-disp-' + name).textContent = ms + 'ms';
     clearTimeout(faultTimers[name + '-burstinterval']);
     faultTimers[name + '-burstinterval'] = setTimeout(() => {
       patchGen(name, {burst_interval: ms / 1000});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: burst interval set to ${ms}ms`, 'info');
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: burst interval → ${ms}ms`, 'info');
     }, 400);
   }
 
@@ -1819,10 +2030,10 @@
   }
 
   function setSystemStatus(running, label) {
-    document.getElementById('status-dot').className  = 'dot ' + (running ? 'on' : 'off');
+    document.getElementById('status-dot').className   = 'dot ' + (running ? 'on' : 'off');
     document.getElementById('status-text').textContent = label;
-    document.getElementById('btn-start').style.display = running ? 'none'  : '';
-    document.getElementById('btn-stop').style.display  = running ? ''      : 'none';
+    document.getElementById('btn-start').style.display = running ? 'none' : '';
+    document.getElementById('btn-stop').style.display  = running ? '' : 'none';
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -1865,7 +2076,7 @@
 
   async function onModeChange(mode) {
     await patchGen('gen-tcpudp', {mode});
-    addLog(now(), `TCP/UDP mode changed: ${mode}`, mode === 'stealth' ? 'success' : 'info');
+    addLog(now(), `TCP/UDP mode → ${mode}`, mode === 'stealth' ? 'success' : 'info');
   }
 
   async function toggleGen(name, checked) {
@@ -1876,8 +2087,6 @@
     } catch(e) {}
   }
 
-  // Note: toggleGen uses direct generator endpoints via controller proxy
-  // We patch the controller to forward start/stop per generator
   async function patchGen(name, body) {
     try {
       await fetch(`${API}/generator/${name}`, {
