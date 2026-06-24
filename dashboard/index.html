@@ -184,6 +184,51 @@
       color: var(--text-muted);
     }
 
+    /* ── Live Performance (sparklines) ──────────────────────────────────── */
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .perf-card {
+      padding: 14px 16px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .perf-card:last-child { border-right: none; }
+
+    .perf-card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .perf-card-title .packets-count { font-weight: 500; }
+
+    .perf-canvas {
+      width: 100%;
+      display: block;
+    }
+
+    .perf-legend {
+      display: flex;
+      gap: 16px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .perf-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .perf-legend .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    .swatch-rate    { background: var(--accent); }
+    .swatch-latency { background: var(--orange); }
+
     /* ── Profile row ─────────────────────────────────────────────────── */
     .profile-row {
       display: flex;
@@ -476,6 +521,48 @@
         <div class="kpi-value" id="kpi-active">-</div>
         <div class="kpi-label">Active protocols</div>
       </div>
+    </div>
+  </section>
+
+  <!-- Live Performance -->
+  <section>
+    <div class="section-label">Live Performance (last ~5 min)</div>
+    <div class="perf-grid">
+      <div class="perf-card">
+        <div class="perf-card-title"><span>HTTP/2</span><span class="packets-count" id="perf-rate-now-gen-http2">-</span></div>
+        <canvas class="perf-canvas" id="perf-rate-gen-http2" width="200" height="40"></canvas>
+        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-http2">-</span></div>
+        <canvas class="perf-canvas" id="perf-lat-gen-http2" width="200" height="32"></canvas>
+      </div>
+      <div class="perf-card">
+        <div class="perf-card-title"><span>QUIC</span><span class="packets-count" id="perf-rate-now-gen-quic">-</span></div>
+        <canvas class="perf-canvas" id="perf-rate-gen-quic" width="200" height="40"></canvas>
+        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-quic">-</span></div>
+        <canvas class="perf-canvas" id="perf-lat-gen-quic" width="200" height="32"></canvas>
+      </div>
+      <div class="perf-card">
+        <div class="perf-card-title"><span>MQTT</span><span class="packets-count" id="perf-rate-now-gen-mqtt">-</span></div>
+        <canvas class="perf-canvas" id="perf-rate-gen-mqtt" width="200" height="40"></canvas>
+        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-mqtt">-</span></div>
+        <canvas class="perf-canvas" id="perf-lat-gen-mqtt" width="200" height="32"></canvas>
+      </div>
+      <div class="perf-card">
+        <div class="perf-card-title"><span>TCP/UDP</span><span class="packets-count" id="perf-rate-now-gen-tcpudp">-</span></div>
+        <canvas class="perf-canvas" id="perf-rate-gen-tcpudp" width="200" height="40"></canvas>
+        <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-tcpudp">-</span></div>
+        <canvas class="perf-canvas" id="perf-lat-gen-tcpudp" width="200" height="32"></canvas>
+      </div>
+    </div>
+    <div class="perf-legend">
+      <span><i class="swatch swatch-rate"></i> Throughput (bytes/sec)</span>
+      <span><i class="swatch swatch-latency"></i> Latency (ms)</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
+      Each generator keeps a rolling ~5-minute history of its own throughput/latency/error
+      snapshots (one point every ~5s) and reports it via its own <code>/status</code> endpoint;
+      the controller passes it through unchanged, no separate metrics polling needed. Useful for
+      seeing the effect of a config change (profile switch, Adaptive Control, fault injection)
+      live, without waiting for a Wireshark capture.
     </div>
   </section>
 
@@ -1013,6 +1100,13 @@
     hold: '- held',
   };
 
+  // Mirrors the --accent / --orange / --text-light CSS variables; canvas 2D
+  // fillStyle/strokeStyle cannot resolve var(...) so the hex values are
+  // duplicated here.
+  const COLOR_RATE    = '#0969da';
+  const COLOR_LATENCY = '#9a6700';
+  const COLOR_EMPTY   = '#9198a1';
+
   // What a passive observer (attacker on the wire) could infer per protocol,
   // based on the generator's current live configuration.
   const FINGERPRINT_NOTES = {
@@ -1397,6 +1491,9 @@
       }
     }
 
+    // Live performance sparklines
+    renderPerf(data);
+
     // Adaptive Control
     renderAdaptive(data);
 
@@ -1408,6 +1505,67 @@
     const newEntries = log.slice(seenLogCount);
     newEntries.forEach(e => addLog(e.time, e.message, e.level || 'info'));
     seenLogCount = log.length;
+  }
+
+  // Draws a single-series sparkline (line + faint fill) into `canvas`, scaled
+  // to that series' own min/max so it stays readable regardless of the
+  // absolute magnitude (bytes/sec vs. milliseconds).
+  function drawSparkline(canvas, values, color) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (!values || values.length === 0) {
+      ctx.fillStyle = COLOR_EMPTY;
+      ctx.font = '11px sans-serif';
+      ctx.fillText('No data yet', 6, h / 2 + 4);
+      return;
+    }
+
+    const pad   = 3;
+    const min   = Math.min(...values);
+    const max   = Math.max(...values);
+    const range = (max - min) || 1; // flat series: avoid divide-by-zero, draw a flat mid-line
+    const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+
+    const xAt = i => pad + i * stepX;
+    const yAt = v => h - pad - ((v - min) / range) * (h - pad * 2);
+
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const x = xAt(i), y = yAt(v);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+
+    // Faint fill under the line for legibility at a glance.
+    ctx.lineTo(xAt(values.length - 1), h - pad);
+    ctx.lineTo(xAt(0), h - pad);
+    ctx.closePath();
+    ctx.fillStyle = color + '1a'; // ~10% alpha (8-digit hex)
+    ctx.fill();
+  }
+
+  function renderPerf(data) {
+    const gens = data.generators || {};
+    ['gen-http2', 'gen-quic', 'gen-mqtt', 'gen-tcpudp'].forEach(name => {
+      const g    = gens[name] || {};
+      const hist = g.history || [];
+
+      const rateCanvas = document.getElementById('perf-rate-' + name);
+      const latCanvas  = document.getElementById('perf-lat-' + name);
+      if (rateCanvas) drawSparkline(rateCanvas, hist.map(p => p.rate_bps), COLOR_RATE);
+      if (latCanvas)  drawSparkline(latCanvas,  hist.map(p => p.latency_ms), COLOR_LATENCY);
+
+      const rateNow = document.getElementById('perf-rate-now-' + name);
+      const latNow  = document.getElementById('perf-lat-now-' + name);
+      if (rateNow) rateNow.textContent = (g.rate_bps !== undefined) ? fmtBytes(g.rate_bps) : '-';
+      if (latNow)  latNow.textContent  = (g.latency_ms !== undefined && g.latency_ms !== null)
+        ? Number(g.latency_ms).toFixed(1) + ' ms' : '-';
+    });
   }
 
   function renderAdaptive(data) {

@@ -67,6 +67,12 @@ _lock = threading.Lock()
 _bytes_window: list[tuple[float, int]] = []
 _latency_window: list[tuple[float, float]] = []
 
+# Ring buffer of recent metric snapshots (one per _metrics() tick, ~5s apart),
+# capped to the last 5 minutes. Exposed via /status so the dashboard can draw
+# live rate/latency/error sparklines without polling a separate endpoint.
+_HISTORY_MAXLEN = 60
+_history: list[dict] = []
+
 
 # ── Models (Swagger) ────────────────────────────────────────────────────────
 
@@ -160,6 +166,11 @@ class StatusResponse(BaseModel):
     latency_ms: float
     fault_rate: float
     extra_latency_ms: float
+    history: list[dict] = Field(
+        default_factory=list,
+        description="Recent metric snapshots (~5s apart, up to 5 minutes), each "
+                     "{ts, rate_bps, latency_ms, errors, packets_sent}. For live dashboard charts."
+    )
 
 
 class OkResponse(BaseModel):
@@ -271,6 +282,14 @@ async def _metrics():
         with _lock:
             state["rate_bps"]   = int(rate_bps)
             state["latency_ms"] = round(avg_latency, 2)
+            _history.append({
+                "ts":           now,
+                "rate_bps":     state["rate_bps"],
+                "latency_ms":   state["latency_ms"],
+                "errors":       state["errors"],
+                "packets_sent": state["packets_sent"],
+            })
+            del _history[:-_HISTORY_MAXLEN]
             payload = {
                 "generator":    "gen-http2",
                 "running":      state["running"],
@@ -334,6 +353,7 @@ async def status():
         result["burst_active"] = _is_burst_active(
             result["pattern"], result["burst_duration"], result["burst_interval"]
         )
+        result["history"] = list(_history)
         return result
 
 

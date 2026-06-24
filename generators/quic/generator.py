@@ -60,6 +60,12 @@ _lock = threading.Lock()
 _bytes_window: list[tuple[float, int]] = []
 _latency_window: list[tuple[float, float]] = []
 
+# Ring buffer of recent metric snapshots (one per _metrics() tick, ~5s apart),
+# capped to the last 5 minutes. Exposed via /status so the dashboard can draw
+# live rate/latency/error sparklines without polling a separate endpoint.
+_HISTORY_MAXLEN = 60
+_history: list[dict] = []
+
 # Cached TLS session ticket from the most recent connection. When use_0rtt is
 # enabled, this is handed to aioquic on the next (re)connect so the handshake
 # can be resumed via 0-RTT instead of a full 1-RTT handshake. Only accessed
@@ -154,6 +160,11 @@ class StatusResponse(BaseModel):
     latency_ms: float
     fault_rate: float
     extra_latency_ms: float
+    history: list[dict] = Field(
+        default_factory=list,
+        description="Recent metric snapshots (~5s apart, up to 5 minutes), each "
+                     "{ts, rate_bps, latency_ms, errors, packets_sent}. For live dashboard charts."
+    )
 
 
 class OkResponse(BaseModel):
@@ -323,6 +334,14 @@ async def _metrics():
         with _lock:
             state["rate_bps"]   = int(rate_bps)
             state["latency_ms"] = round(avg_latency, 2)
+            _history.append({
+                "ts":           now,
+                "rate_bps":     state["rate_bps"],
+                "latency_ms":   state["latency_ms"],
+                "errors":       state["errors"],
+                "packets_sent": state["packets_sent"],
+            })
+            del _history[:-_HISTORY_MAXLEN]
             payload = {
                 "generator":    "gen-quic",
                 "running":      state["running"],
@@ -385,7 +404,9 @@ async def config(body: GeneratorConfig = Body(...)):
 @app.get("/status", response_model=StatusResponse, summary="Get live status and statistics")
 async def status():
     with _lock:
-        return dict(state)
+        result = dict(state)
+        result["history"] = list(_history)
+        return result
 
 
 if __name__ == "__main__":
