@@ -46,14 +46,15 @@
 \maketitle
 
 \begin{abstract}
-This report describes a containerized system that generates and controls network
-traffic across five protocols at once: HTTP/2, QUIC, MQTT and raw TCP/UDP. Ten
-Docker containers are coordinated by a central controller that reads YAML traffic
-profiles and steers four generators through a REST API. The system supports
-constant, periodic-burst, linearly ramped and Poisson-distributed sending patterns,
-an autonomous Adaptive Control loop that reacts to error rates and latency, and a
-stealth mode for the TCP/UDP generator that hides its statistical fingerprint. This
-report covers the architecture, the implementation decisions behind it, the
+This report describes a containerized system for generating and controlling
+network traffic. It covers five protocols at once: HTTP/2, QUIC, MQTT, TCP and
+UDP. Ten Docker containers make up the system. A central controller reads
+YAML traffic profiles and drives four generators through a REST API. The
+system supports four sending patterns: constant, periodic burst, linear ramp,
+and Poisson-distributed random intervals. It also runs an autonomous Adaptive
+Control loop that reacts to error rates and latency, plus a stealth mode for
+the TCP/UDP generator that hides its statistical fingerprint. This report
+covers the architecture, the implementation decisions behind it, the
 configuration format, and the Wireshark-based traffic analysis.
 \end{abstract}
 
