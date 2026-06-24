@@ -13,6 +13,7 @@ lock = threading.Lock()
 
 store = {
     "generators": {},   # name → latest stat snapshot
+    "analyzers":  {},   # name → latest network-analyzer snapshot (totals + io_graph)
     "start_time": time.time(),
 }
 
@@ -53,6 +54,91 @@ def metrics():
         "total_errors":   total_errors,
         "rate_bps":       rate_bps,
         "generators":     gens,
+    })
+
+
+# ── Receive a snapshot from a network-analyzer sidecar ─────────────────────────
+
+@app.route("/analysis/update", methods=["POST"])
+def analysis_update():
+    payload = request.get_json(silent=True)
+    if not payload or "analyzer" not in payload:
+        return jsonify({"error": "missing 'analyzer' field"}), 400
+
+    name = payload["analyzer"]
+    with lock:
+        store["analyzers"][name] = {**payload, "_ts": time.time()}
+
+    return jsonify({"ok": True})
+
+
+# ── Aggregated network-analysis endpoint ────────────────────────────────────────
+# Each analyzer sidecar only sees the traffic crossing its own target container's
+# network namespace, so simply summing across all of them reconstructs the full
+# picture (Wireshark's "Protocol Hierarchy" + "I/O Graph", but live and continuous).
+
+@app.route("/analysis", methods=["GET"])
+def analysis():
+    with lock:
+        analyzers = dict(store["analyzers"])
+
+    protocols = {}
+    buckets = {}
+    size_hist = {}
+    gap_hist = {}
+    failure_events = []
+    status = {}
+
+    for name, snap in analyzers.items():
+        status[name] = {
+            "iface":       snap.get("iface"),
+            "age_seconds": round(time.time() - snap.get("_ts", time.time()), 1),
+        }
+
+        for proto, vals in snap.get("totals", {}).items():
+            agg = protocols.setdefault(proto, {"packets": 0, "bytes": 0})
+            agg["packets"] += vals.get("packets", 0)
+            agg["bytes"]   += vals.get("bytes", 0)
+
+        for point in snap.get("io_graph", []):
+            sec = point.get("ts")
+            if sec is None:
+                continue
+            bucket = buckets.setdefault(sec, {})
+            for proto, vals in point.items():
+                if proto == "ts":
+                    continue
+                agg = bucket.setdefault(proto, {"packets": 0, "bytes": 0})
+                agg["packets"] += vals.get("packets", 0)
+                agg["bytes"]   += vals.get("bytes", 0)
+
+        # size_hist/gap_hist: each protocol is only ever observed by the one
+        # analyzer sharing its target's namespace, so summing across analyzers
+        # is equivalent to a passthrough - but stays correct even if that
+        # assumption ever changes (e.g. a future analyzer seeing multiple ports).
+        for proto, label_counts in snap.get("size_hist", {}).items():
+            agg = size_hist.setdefault(proto, {})
+            for label, count in label_counts.items():
+                agg[label] = agg.get(label, 0) + count
+
+        for proto, label_counts in snap.get("gap_hist", {}).items():
+            agg = gap_hist.setdefault(proto, {})
+            for label, count in label_counts.items():
+                agg[label] = agg.get(label, 0) + count
+
+        failure_events.extend(snap.get("failure_events", []))
+
+    io_graph = [{"ts": sec, **buckets[sec]} for sec in sorted(buckets)[-120:]]
+    failure_events.sort(key=lambda e: e.get("ts", 0))
+    failure_events = failure_events[-100:]
+
+    return jsonify({
+        "protocols":      protocols,
+        "io_graph":       io_graph,
+        "size_hist":      size_hist,
+        "gap_hist":       gap_hist,
+        "failure_events": failure_events,
+        "analyzers":      status,
     })
 
 
