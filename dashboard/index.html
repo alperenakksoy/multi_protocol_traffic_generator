@@ -227,6 +227,8 @@
       transition: opacity 0.15s;
       z-index: 200;
       box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .info-icon::before {
@@ -283,6 +285,36 @@
     }
 
     .profile-label { font-size: 13px; color: var(--text-muted); margin-right: 4px; }
+
+    /* ── Live Performance grid ───────────────────────────────────────── */
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .perf-card {
+      padding: 14px 16px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .perf-card:last-child { border-right: none; }
+
+    .perf-card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .perf-card-title .packets-count { font-weight: 500; }
+
+    .perf-canvas { width: 100%; display: block; }
+
 
     /* ── Generator table ─────────────────────────────────────────────── */
     .gen-table {
@@ -567,6 +599,39 @@
         <div class="kpi">
           <div class="kpi-value" id="kpi-active">-</div>
           <div class="kpi-label">Active protocols</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Performance -->
+    <section>
+      <div class="section-label">Live Performance
+        <i class="info-icon" data-tip="Per-protocol throughput and latency from the server-side rolling history (~5 min). Each generator reports one snapshot every ~5s via its /status endpoint. Shows the effect of profile switches, Adaptive Control, and fault injection in real time.">i</i>
+      </div>
+      <div class="perf-grid">
+        <div class="perf-card">
+          <div class="perf-card-title"><span>HTTP/2</span><span class="packets-count" id="perf-rate-now-gen-http2">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-http2" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-http2">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-http2" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>QUIC</span><span class="packets-count" id="perf-rate-now-gen-quic">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-quic" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-quic">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-quic" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>MQTT</span><span class="packets-count" id="perf-rate-now-gen-mqtt">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-mqtt" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-mqtt">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-mqtt" width="200" height="32"></canvas>
+        </div>
+        <div class="perf-card">
+          <div class="perf-card-title"><span>TCP/UDP</span><span class="packets-count" id="perf-rate-now-gen-tcpudp">-</span></div>
+          <canvas class="perf-canvas" id="perf-rate-gen-tcpudp" width="200" height="40"></canvas>
+          <div class="perf-card-title" style="margin-top:8px"><span>Latency</span><span class="packets-count" id="perf-lat-now-gen-tcpudp">-</span></div>
+          <canvas class="perf-canvas" id="perf-lat-gen-tcpudp" width="200" height="32"></canvas>
         </div>
       </div>
     </section>
@@ -1142,6 +1207,11 @@
     cooldown:              'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops.',
   };
 
+  // Canvas colors for perf charts (CSS vars cannot be used in Canvas 2D API)
+  const COLOR_RATE    = '#0969da';
+  const COLOR_LATENCY = '#9a6700';
+  const COLOR_EMPTY   = '#9198a1';
+
   const PROTOCOL_LABELS = {
     'gen-http2':  'HTTP/2',
     'gen-quic':   'QUIC',
@@ -1161,6 +1231,25 @@
   const SP_POINTS    = 45;   // 45 × 2s poll = 90s rolling window
   const SP_HISTORY   = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
   const SP_PREV_PKTS = {};
+
+  // Client-side perf history (rate_bps + latency_ms per poll, max 150 points = ~5 min)
+  const PERF_MAX     = 150;
+  const PERF_RATE    = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+  const PERF_LAT     = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+
+  function pushPerfData(gens) {
+    GEN_NAMES.forEach(name => {
+      const g = gens[name] || {};
+      if (g.rate_bps    !== undefined) {
+        PERF_RATE[name].push(g.rate_bps);
+        if (PERF_RATE[name].length > PERF_MAX) PERF_RATE[name].shift();
+      }
+      if (g.latency_ms  !== undefined && g.latency_ms !== null) {
+        PERF_LAT[name].push(g.latency_ms);
+        if (PERF_LAT[name].length > PERF_MAX) PERF_LAT[name].shift();
+      }
+    });
+  }
 
   const SP_COLORS = {
     'gen-http2':  '#0969da',
@@ -1204,7 +1293,7 @@
 
     const baseline = `<line x1="0" y1="${baseY}" x2="${W}" y2="${baseY}" stroke="#e8ecf0" stroke-width="1"/>`;
 
-    // Not enough data yet — draw a muted flat zero line.
+    // Not enough data yet. Draw a muted flat zero line.
     if (history.length < 2) {
       return `<svg width="${W}" height="${H}" style="display:block;flex-shrink:0">` +
         `${baseline}<line x1="0" y1="${baseY}" x2="${W}" y2="${baseY}" stroke="${c}" stroke-width="1.5" opacity="0.2"/></svg>`;
@@ -1605,6 +1694,7 @@
       if (document.activeElement !== el) { el.value = ms; disp.textContent = ms + 'ms'; }
     }
 
+    renderPerf(data);
     renderAdaptive(data);
     pushSparklineData(data.generators || {});
     renderAttacker(data);
@@ -1613,6 +1703,56 @@
     const newEntries = log.slice(seenLogCount);
     newEntries.forEach(e => addLog(e.time, e.message, e.level || 'info'));
     seenLogCount = log.length;
+  }
+
+  function drawSparkline(canvas, values, color) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!values || values.length === 0) {
+      ctx.fillStyle = COLOR_EMPTY;
+      ctx.font = '11px sans-serif';
+      ctx.fillText('No data yet', 6, h / 2 + 4);
+      return;
+    }
+    const pad   = 3;
+    const min   = Math.min(...values);
+    const max   = Math.max(...values);
+    const range = (max - min) || 1;
+    const stepX = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+    const xAt = i => pad + i * stepX;
+    const yAt = v => h - pad - ((v - min) / range) * (h - pad * 2);
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const x = xAt(i), y = yAt(v);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+    ctx.lineTo(xAt(values.length - 1), h - pad);
+    ctx.lineTo(xAt(0), h - pad);
+    ctx.closePath();
+    ctx.fillStyle = color + '1a';
+    ctx.fill();
+  }
+
+  function renderPerf(data) {
+    const gens = data.generators || {};
+    pushPerfData(gens);
+    GEN_NAMES.forEach(name => {
+      const g = gens[name] || {};
+      const rateCanvas = document.getElementById('perf-rate-' + name);
+      const latCanvas  = document.getElementById('perf-lat-' + name);
+      if (rateCanvas) drawSparkline(rateCanvas, PERF_RATE[name], COLOR_RATE);
+      if (latCanvas)  drawSparkline(latCanvas,  PERF_LAT[name],  COLOR_LATENCY);
+      const rateNow = document.getElementById('perf-rate-now-' + name);
+      const latNow  = document.getElementById('perf-lat-now-' + name);
+      if (rateNow) rateNow.textContent = (g.rate_bps !== undefined) ? fmtBytes(g.rate_bps) : '-';
+      if (latNow)  latNow.textContent  = (g.latency_ms !== undefined && g.latency_ms !== null)
+        ? Number(g.latency_ms).toFixed(1) + ' ms' : '-';
+    });
   }
 
   function renderAdaptive(data) {
@@ -1681,15 +1821,13 @@
 
       const filter    = PROTOCOL_FILTERS[name] || '-';
       const sparkline = generateSparkline(name);
-      const tags      = generateTags(name, g);
-
       return `<div class="gen-row gen-row-auto" style="grid-template-columns: 90px 80px 90px 60px 180px 1fr; align-items: start; padding-top: 12px; padding-bottom: 12px;">
         <div class="gen-name" style="padding-top:2px">${label}</div>
         <div class="packets-count" style="padding-top:3px">${size}</div>
         <div class="packets-count" style="padding-top:3px">${interval}</div>
         <div class="packets-count" style="padding-top:3px">${latency}</div>
         <div><code style="font-size:11px;font-family:var(--mono);background:var(--bg-muted);border:1px solid var(--border-muted);border-radius:4px;padding:2px 5px;color:var(--text-muted);word-break:break-all;display:inline-block;line-height:1.5">${filter}</code></div>
-        <div>${sparkline}${tags}</div>
+        <div>${sparkline}</div>
       </div>`;
     }).join('');
   }

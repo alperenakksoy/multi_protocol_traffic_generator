@@ -89,6 +89,12 @@ _lock  = threading.Lock()
 _bytes_window: list[tuple[float, int]] = []  # (timestamp, bytes)
 _latency_window: list[tuple[float, float]] = []
 
+# Ring buffer of recent metric snapshots (one per _metrics_loop() tick, ~5s apart),
+# capped to the last 5 minutes. Exposed via /status so the dashboard can draw
+# live rate/latency/error sparklines without polling a separate endpoint.
+_HISTORY_MAXLEN = 60
+_history: list[dict] = []
+
 # Topics we are currently subscribed to (kept in sync with state["topic_count"]).
 _subscribed_topics: set[str] = set()
 
@@ -157,6 +163,11 @@ class StatusResponse(BaseModel):
     latency_ms: float
     fault_rate: float
     extra_latency_ms: float
+    history: list[dict] = Field(
+        default_factory=list,
+        description="Recent metric snapshots (~5s apart, up to 5 minutes), each "
+                     "{ts, rate_bps, latency_ms, errors, packets_sent}. For live dashboard charts."
+    )
 
 
 class OkResponse(BaseModel):
@@ -313,6 +324,14 @@ def _metrics_loop():
         with _lock:
             state["rate_bps"]   = int(rate_bps)
             state["latency_ms"] = round(avg_latency, 2)
+            _history.append({
+                "ts":           now,
+                "rate_bps":     state["rate_bps"],
+                "latency_ms":   state["latency_ms"],
+                "errors":       state["errors"],
+                "packets_sent": state["packets_sent"],
+            })
+            del _history[:-_HISTORY_MAXLEN]
             payload = {
                 "generator":    "gen-mqtt",
                 "running":      state["running"],
@@ -378,7 +397,9 @@ async def config(body: GeneratorConfig = Body(...)):
 @app.get("/status", response_model=StatusResponse, summary="Get live status and statistics")
 async def status():
     with _lock:
-        return dict(state)
+        result = dict(state)
+        result["history"] = list(_history)
+        return result
 
 
 if __name__ == "__main__":
