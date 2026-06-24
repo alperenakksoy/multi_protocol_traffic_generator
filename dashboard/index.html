@@ -276,6 +276,51 @@
 
     .kpi-label { font-size: 12px; color: var(--text-muted); }
 
+    /* ── Live Performance (sparklines) ──────────────────────────────────── */
+    .perf-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .perf-card {
+      padding: 14px 16px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .perf-card:last-child { border-right: none; }
+
+    .perf-card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .perf-card-title .packets-count { font-weight: 500; }
+
+    .perf-canvas {
+      width: 100%;
+      display: block;
+    }
+
+    .perf-legend {
+      display: flex;
+      gap: 16px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .perf-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .perf-legend .swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    .swatch-rate    { background: var(--accent); }
+    .swatch-latency { background: var(--orange); }
+
     /* ── Profile row ─────────────────────────────────────────────────── */
     .profile-row {
       display: flex;
