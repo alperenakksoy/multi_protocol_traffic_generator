@@ -258,6 +258,54 @@ The collector aggregates this and exposes it at `/metrics`:
 
 ---
 
+### 8. Network Analyzer (`analyzer/`)
+
+**Technology**: Python (stdlib only) driving a `tshark` subprocess.
+
+**Why this exists**: every component above only reports what it *thinks* it sent (`packets_sent`, `rate_bps`, ...) — self-reported application-level counters, not ground truth. The 5 required Wireshark analyses instead need what actually crossed the wire, and until now that only existed as a manual, offline `tcpdump`/Wireshark session (see [`WIRESHARK_GUIDE.md`](WIRESHARK_GUIDE.md)), disconnected from the dashboard. The Network Analyzer closes that gap: it captures real packets continuously and feeds live protocol-distribution and I/O-graph data back into the same dashboard you use to generate the traffic, so a config change becomes a visible effect *on the wire* within a couple of seconds.
+
+**Deployment**: one sidecar per target container — `analyzer-http2`, `analyzer-quic`, `analyzer-mqtt`, `analyzer-tcpudp` — each attached via `network_mode: "service:<target>"` instead of sniffing the `mic-net` bridge directly. This is the same workaround `WIRESHARK_GUIDE.md` already documents for Docker Desktop on macOS/Windows (no host-visible `docker0`/`br-*` interface), just automated and continuous instead of a one-shot manual `tcpdump`. Each container needs `cap_add: [NET_RAW, NET_ADMIN]` for `tshark` to capture.
+
+**Capture**: a single `tshark` invocation per sidecar, filtered to exclude its own reporting traffic:
+```
+tshark -i eth0 -f "not port 9090" -T fields \
+  -e frame.time_epoch -e frame.len \
+  -e tcp.srcport -e tcp.dstport -e udp.srcport -e udp.dstport
+```
+The `-f "not port 9090"` capture filter matters: since the sidecar *shares* its target's network namespace, its own `POST /analysis/update` calls to the Metrics Collector would otherwise be captured and misclassified as traffic too.
+
+**Classification**: purely by port number, matching the same ports `WIRESHARK_GUIDE.md` already uses as Wireshark filters (`tcp.port==8080`→http2, `tcp.port==1883`→mqtt, `udp.port==4433`→quic, port 9999→tcpudp). Each sidecar keeps a running total per protocol plus a 1-second-bucketed history (~2 minutes) and POSTs both to the Metrics Collector every second via `POST /analysis/update` — the same `/update` pattern the generators already use, just for captured packets instead of self-reports.
+
+**Aggregation**: each sidecar only sees its own target's namespace, so it only ever reports its own protocol (cross-talk is structurally impossible). `GET /analysis` on the Metrics Collector therefore reconstructs the full picture by simply summing every sidecar's totals and merging their bucketed histories by timestamp — mirroring the manual "capture 4 in parallel, then `mergecap`" workflow from `WIRESHARK_GUIDE.md`, but live. The Controller proxies this into `GET /status` (`status.analysis`) exactly like it already does for `metrics`, so the dashboard needs no second polling target.
+
+**Dashboard**: the "Live Network Analysis" section (between Live Performance and Traffic Profile) shows a live byte-share bar per protocol and a multi-line captured-throughput graph, replacing guesswork with measured numbers.
+
+**Behavioral fingerprinting histograms (Analysis Task 3)**: each sidecar also buckets every captured packet by size (`<64`, `64-128`, ... `1500+` bytes) and by inter-arrival gap since the *previous* packet of the same protocol (`<1ms`, `1-5ms`, ... `1000ms+`), reported as `size_hist`/`gap_hist` alongside `totals`/`io_graph`. Both histograms are exponentially decayed by `HIST_DECAY = 0.88` once per second (~5s half-life) instead of kept as an all-time cumulative count — this is what makes them *live*: switching `gen-tcpudp` from `normal` to `stealth` mode visibly reshapes the histogram over the next ~15-25 seconds as old samples fade out, rather than the new shape being permanently diluted by hours of prior history. The dashboard's "Attacker's View" section renders both histograms per protocol as small bar charts and derives its verdict text (e.g. "clear, repeatable fingerprint" vs "spread out, hard to distinguish from background noise") from the dominant bucket's share of the total — measured, not hand-written.
+
+**Real finding from building this**: with `tcp_ratio > 0` (the default), TCP/UDP's `stealth` mode does *not* fully defeat fingerprinting the way the qualitative description in [`WIRESHARK_GUIDE.md`](WIRESHARK_GUIDE.md) suggests. Every TCP send is a fresh `connect()`/`sendall()`/`close()` cycle (see generator section 5 above), so each logical send produces a stereotyped burst of small SYN/ACK/FIN control packets within sub-millisecond gaps of each other - and that burst pattern is identical whether `mode` is `normal` or `stealth`, since `mode` only randomizes the *data* packet's size/timing, not the connection overhead around it. Measured live: at `tcp_ratio=60` (the default), both modes showed a histogram dominated >75% by the `64-128`/`<1ms` buckets (the control-packet burst), masking the data-size randomization almost entirely. Only with `tcp_ratio=0` (pure UDP, no connection overhead) does the expected contrast appear cleanly: normal mode converges to 97% in one size bucket, stealth mode spreads across five buckets with no bucket above 40%. Worth citing directly in the Task 3 report section as a "distinguishable vs. overlapping characteristics" finding - TCP connection churn is itself a fingerprint, independent of payload obfuscation.
+
+**Failure visibility (Analysis Task 4)**: each sidecar additionally extracts `tcp.flags.reset` and `mqtt.msgtype` per packet and watches a per-protocol "last packet seen" timestamp, reporting a `failure_events` list (capped at the 50 most recent) alongside the other fields:
+- **Explicit signals** (fire the instant the packet crosses the wire): a TCP RST (`signal: tcp_rst`) on any protocol, an MQTT DISCONNECT (`mqtt.msgtype == 14`, `signal: mqtt_disconnect`).
+- **Generic fallback** (`_check_silence()`, edge-triggered on active→silent / silent→active transitions): if a protocol that was sending packets has none for `SILENCE_THRESHOLD_S = 8.0` seconds, flag `signal: silence`; when it resumes, flag `signal: recovered`. This is what makes a QUIC failure visible at all - a `CONNECTION_CLOSE` frame on an established (1-RTT, short-header) connection is encrypted and not visible to a passive observer without TLS key material, unlike a TCP RST or an MQTT DISCONNECT, so "the responses just stop" is the honest, *actually observable* signal for QUIC.
+
+The Metrics Collector concatenates all sidecars' `failure_events`, sorts by timestamp, and caps to the most recent 100. The dashboard's "Failure Signals (Live)" panel (between Fault Injection and Attacker's View) renders these as a deduplicated, color-coded feed, reusing the System Log's box/line styling.
+
+**Calibrating `SILENCE_THRESHOLD_S`**: started at 3.0s, which turned out to fire constantly during *normal* operation - at a Poisson (`pattern: random`) mean rate of 1 pkt/s, `P(gap > 3s) ≈ e⁻³ ≈ 5%` per inter-arrival gap, so dozens of false "silence" events appeared per minute on legitimately low-rate phases. Raised to 8.0s (`P(gap > 8s) ≈ e⁻⁸ ≈ 0.03%`), verified stable under normal traffic. Silence events very early in a `warmup` ramp (rates still near zero) are expected and benign, not failures - same caveat applies to a real Wireshark capture spanning a warmup period.
+
+**Real finding from building this - target-side capture goes blind on `docker stop`**: verified live by running `docker stop target-http2` while watching the dashboard. `analyzer-http2` shares `target-http2`'s network namespace, which is torn down the instant the container stops - its `tshark` immediately errors with `"There is no device named eth0"` and stays blind even after the target is *restarted* (the namespace is recreated fresh; the analyzer must be recreated too, e.g. `docker compose up -d --force-recreate analyzer-http2`, to reattach). This is the exact constraint [`WIRESHARK_GUIDE.md`](WIRESHARK_GUIDE.md) already documents for the manual method ("attach to the **generator** side, not the target you stop"), now confirmed to apply equally to the live analyzer. Practical consequence: with only the 4 target-side sidecars that exist today, the live dashboard can only observe a failure when a **generator** is stopped, not when a **target** is stopped (for the latter, fall back to the manual `WIRESHARK_GUIDE.md` procedure, or add generator-side sidecars as a future extension).
+
+**Second real finding - stopping a generator produces a graceful close, not a RST**: verified live by running `docker stop gen-http2` against a stable baseline. The explicit `tcp_rst`/`mqtt_disconnect` signals did **not** fire; only the `silence` fallback did, exactly 8.0s after the last packet (matching `SILENCE_THRESHOLD_S` precisely - `docker stop`'s SIGTERM lets the OS close the generator's sockets cleanly before the connection goes quiet). A TCP RST specifically requires the *other* side to refuse/abort an established connection or a new SYN, which is the "target stopped" scenario above - and per the first finding, that's the one vantage point this architecture can't currently see. So today's live setup reliably proves "failure becomes visible," with a known ~8s latency floor from the silence threshold; demonstrating the sub-second RST timing the assignment's own example describes still needs either a generator-side sidecar or the manual `WIRESHARK_GUIDE.md` capture.
+
+**Known limitations**:
+- Encrypted payloads (QUIC/TLS) are no more visible here than in Wireshark itself — same constraint, not a new one.
+- This does **not** replace the required `.pcapng` deliverables or their official Wireshark screenshots; it is a live, continuous complement that makes the *effect* of a config change visible immediately, while the formal captures for the report are still taken separately.
+- Analyzer totals are cumulative since each sidecar's own start and are not wired into the existing `POST /reset` (which only resets generator counters) — restart the analyzer containers to zero them.
+- See the two "real finding" call-outs above for the current failure-visibility blind spots (target-side capture dies with its target; RST specifically needs the generator-side vantage point this setup doesn't have yet).
+
+**Fixed bug found while building this**: `gen-quic` used to report successful sends (`packets_sent` climbing, `errors=0`) while genuinely zero UDP packets reached `target-quic` - aioquic's default 60s `idle_timeout` silently terminated the connection during any `rate=0` period (nothing was sending keep-alives), and nothing checked `conn._closed` before calling `transmit()`/`send_data()` again. Fixed in `generators/quic/generator.py`'s `_run_connection()`: it now returns (triggering a fresh reconnect) as soon as `conn._closed.is_set()`. Verified live: QUIC's protocol-distribution share went from ~0% to a sustained ~15-30%, matching the other protocols.
+
+---
+
 ## Autonomous features (beyond the baseline requirements)
 
 ### Warmup / Cooldown / Ramping
@@ -300,16 +348,24 @@ Browser ──────────► │Dashboard │
     ┌─────────┐     ┌─────────┐          [no target,
     │target-  │     │target-  │           raw packets]
     │http2    │     │quic     │
-    └─────────┘     └─────────┘
-         │               │
-         └───────┬────────┘
-                 │ Stats
+    └────┬────┘     └────┬────┘                │
+         │ shared netns  │ shared netns        │ shared netns
+         ▼               ▼                     ▼
+    ┌─────────┐     ┌─────────┐          ┌─────────────┐
+    │analyzer-│ ... │analyzer-│          │analyzer-tcpudp│  (tshark, real packets)
+    │http2    │     │quic     │          └─────────────┘
+    └────┬────┘     └────┬────┘                │
+         │               │                     │
+         └───────┬───────┴─────────────────────┘
+                 │ Stats (self-reported)  +  /analysis/update (captured)
                  ▼
            ┌──────────┐
-           │ metrics  │ ◄── all generators send stats
-           └──────────┘
+           │ metrics  │ ◄── generators send self-reported stats
+           └──────────┘ ◄── analyzers send captured totals + io_graph
                  ▲
-    Dashboard ───┘ (GET /metrics every 2 sec)
+          Controller ── GET /metrics + GET /analysis, both proxied into /status
+                 ▲
+    Dashboard ───┘ (GET /status every 2 sec)
 ```
 
 ---

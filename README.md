@@ -95,7 +95,8 @@ docker-compose up
 | `target-http2` | Hypercorn + FastAPI | 8080 | HTTP/2 server |
 | `target-quic` | aioquic | 4433 | QUIC server |
 | `mosquitto` | Eclipse Mosquitto | 1883 | MQTT broker |
-| `metrics` | Python + Flask | 9090 | Aggregates stats from all generators |
+| `metrics` | Python + Flask | 9090 | Aggregates stats from all generators + analyzers |
+| `analyzer-http2`, `analyzer-quic`, `analyzer-mqtt`, `analyzer-tcpudp` | Python + `tshark` | - | Live packet-capture sidecars (one per target's network namespace); real protocol distribution + I/O graph, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#8-network-analyzer-analyzer) |
 
 ---
 
@@ -258,7 +259,7 @@ Five captures need to be created. The exact step-by-step instructions for each c
 
 | Criterion | Weight | How it is fulfilled |
 |---|---|---|
-| System completeness | 25% | All 10 containers run with `docker-compose up` |
+| System completeness | 25% | All 15 containers run with `docker-compose up` |
 | Configuration flexibility | 15% | 3 YAML profiles plus runtime changes via API |
 | Traffic analysis depth | 25% | 5 Wireshark captures plus stealth mode analysis |
 | Multi-system deployment | 10% | 2 lab machines, capture on the link |

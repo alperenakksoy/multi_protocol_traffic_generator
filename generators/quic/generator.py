@@ -287,6 +287,16 @@ async def _run_connection():
             if not running:
                 return  # exits the "async with" and closes the connection cleanly
 
+            if conn._closed.is_set():
+                # The QUIC connection terminated itself (e.g. aioquic's default
+                # 60s idle_timeout firing after a rate=0 period - nothing here
+                # was sending PINGs to keep it alive). transmit()/send_data()
+                # on a closed connection raise nothing and deliver nothing, so
+                # without this check packets_sent/bytes_sent kept climbing
+                # while zero bytes actually reached the target. Return so
+                # _generate()'s loop reconnects with a fresh handshake.
+                return
+
             if rate <= 0:
                 await asyncio.sleep(0.1)
                 continue

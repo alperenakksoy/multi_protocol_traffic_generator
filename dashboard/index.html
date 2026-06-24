@@ -229,6 +229,42 @@
     .swatch-rate    { background: var(--accent); }
     .swatch-latency { background: var(--orange); }
 
+    /* ── Live Network Analysis (protocol distribution + captured I/O) ──────── */
+    .dist-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 16px;
+      margin-bottom: 12px;
+    }
+    .dist-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 12px;
+    }
+    .dist-row:last-child { border-bottom: none; }
+    .dist-label { width: 64px; font-weight: 500; flex-shrink: 0; }
+    .dist-bar-track {
+      flex: 1;
+      height: 8px;
+      background: var(--bg-muted);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .dist-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+    .dist-pct {
+      width: 46px; text-align: right; font-family: var(--mono);
+      color: var(--text-muted); flex-shrink: 0;
+    }
+    .dist-count {
+      width: 160px; text-align: right; font-family: var(--mono);
+      font-size: 11px; color: var(--text-light); flex-shrink: 0;
+    }
+    .analysis-io-canvas { width: 100%; height: 110px; display: block; }
+    .hist-canvas { display: block; border-bottom: 1px solid var(--border-muted); }
+
     /* ── Profile row ─────────────────────────────────────────────────── */
     .profile-row {
       display: flex;
@@ -563,6 +599,31 @@
       the controller passes it through unchanged, no separate metrics polling needed. Useful for
       seeing the effect of a config change (profile switch, Adaptive Control, fault injection)
       live, without waiting for a Wireshark capture.
+    </div>
+  </section>
+
+  <!-- Live Network Analysis (real packet capture, not generator self-reports) -->
+  <section>
+    <div class="section-label">Live Network Analysis (real packet capture)</div>
+    <div class="dist-box" id="proto-dist-rows"></div>
+    <div class="perf-card" style="border:1px solid var(--border);border-radius:8px">
+      <div class="perf-card-title"><span>Captured throughput per protocol (bytes/sec)</span></div>
+      <canvas class="analysis-io-canvas" id="analysis-io-graph" width="900" height="110"></canvas>
+    </div>
+    <div class="perf-legend">
+      <span><i class="swatch" style="background:#0969da"></i> HTTP/2</span>
+      <span><i class="swatch" style="background:#8250df"></i> QUIC</span>
+      <span><i class="swatch" style="background:#1a7f37"></i> MQTT</span>
+      <span><i class="swatch" style="background:#9a6700"></i> TCP/UDP</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:6px" id="analyzer-status"></div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
+      Captured directly off the wire by <code>tshark</code> sidecars attached to each target
+      container's network namespace (<code>analyzer/</code>), independent of what the generators
+      self-report above. Protocol shares are by bytes; the throughput graph buckets real captured
+      packets per second over the last ~2 minutes, so a config change (rate, burst, stealth mode)
+      becomes a visible effect on the actual wire within a couple of seconds, without a manual
+      Wireshark capture.
     </div>
   </section>
 
@@ -1026,23 +1087,48 @@
     </div>
   </section>
 
+  <!-- Failure Signals (Live) -->
+  <section>
+    <div class="section-label">Failure Signals (Live, Real Packet Capture)</div>
+    <div class="log-box" id="failure-box">
+      <div class="log-inner" id="failure-inner" data-empty="true">
+        <div class="log-line"><span class="log-time">-</span><span class="log-msg">No failure signals captured yet.</span></div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:6px">
+      Detects real wire-level failure signals from the same packet capture as "Live Network
+      Analysis" above - TCP RST, MQTT DISCONNECT, and a generic "went silent" signal for
+      protocols with no explicit close indicator (QUIC's 1-RTT CONNECTION_CLOSE is encrypted
+      and not visible without TLS key material, so silence is the honest signal there).
+      Different from the <em>Fault Injection</em> panel above, which simulates errors at the
+      application level with no real wire effect. To see this live: run
+      <code>docker stop target-http2</code> (or <code>target-quic</code>,
+      <code>mosquitto</code>, <code>target-tcpudp</code>) in a terminal and watch a signal
+      appear here within a couple of seconds - the live answer to <strong>Task 4's "how
+      quickly is failure visible?"</strong>.
+    </div>
+  </section>
+
   <!-- Attacker's View -->
   <section>
     <div class="section-label">Attacker's View (Passive Traffic Analysis)</div>
     <div class="gen-table">
-      <div class="gen-header" style="grid-template-columns: 110px 100px 110px 70px 1fr;">
+      <div class="gen-header" style="grid-template-columns: 80px 260px 280px 1fr;">
         <div>Protocol</div>
-        <div>Packet Size</div>
-        <div>Interval</div>
-        <div>Latency</div>
-        <div>Fingerprint Note</div>
+        <div>Packet size (captured)</div>
+        <div>Inter-arrival (captured)</div>
+        <div>Verdict</div>
       </div>
       <div id="attacker-rows"></div>
     </div>
     <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-      Shows what a passive observer (e.g. running Wireshark on the wire) could infer
-      without decryption, based solely on packet size, timing, and protocol metadata.
-      This is the basis for <strong>Task 3 (Behavioral Fingerprinting)</strong>.
+      Histograms are built from real captured packets (same source as "Live Network
+      Analysis" above), exponentially decayed toward the last ~10-15 seconds so the shape
+      reflects <em>current</em> behavior - switching TCP/UDP to Stealth mode visibly
+      reshapes both histograms within seconds, no manual Wireshark capture needed to see
+      it happen. A single tall bar means a recognizable fingerprint; a flat, spread-out
+      histogram means the traffic is statistically hard to distinguish from background
+      noise. This is the basis for <strong>Task 3 (Behavioral Fingerprinting)</strong>.
     </div>
   </section>
 
@@ -1072,6 +1158,7 @@
   const API = 'http://localhost:8000';
   let pollInterval = null;
   let seenLogCount = 0;
+  const seenFailureKeys = new Set();
 
   const PHASE_DESCRIPTIONS = {
     http2_dominant:        'HTTP/2 GET/POST dominates, MQTT and TCP are minimal; protocol hierarchy baseline.',
@@ -1107,37 +1194,44 @@
   const COLOR_LATENCY = '#9a6700';
   const COLOR_EMPTY   = '#9198a1';
 
-  // What a passive observer (attacker on the wire) could infer per protocol,
-  // based on the generator's current live configuration.
-  const FINGERPRINT_NOTES = {
-    'gen-http2': (g) => `TLS/ALPN "h2" on port 443, ${g.concurrent_streams ?? '?'} parallel streams per ` +
-      `connection; multiplexing produces characteristic bursts of equally sized packets (${g.payload_size ?? '?'} B).`,
-    'gen-quic': (g) => `QUIC/HTTP3 over UDP/443, ${g.stream_count ?? '?'} stream(s), 1-RTT handshake per ` +
-      `request; a fixed connection ID and constant packet size (${g.payload_size ?? '?'} B) are recognizable.`,
-    'gen-mqtt': (g) => {
-      const dist = g.qos_distribution;
-      const qosNote = (dist && dist.some(w => w > 0))
-        ? `mixed QoS (weights ${dist.join('/')})`
-        : `QoS ${g.qos ?? '?'}`;
-      return `MQTT over TCP/1883, ${qosNote} across ${g.topic_count ?? '?'} topics; regular PUBLISH packets ` +
-        `plus ACK handshakes for QoS 1/2, topic names often in plaintext. This generator also subscribes, ` +
-        `so the broker's fan-out (PUBLISH back to subscriber) is visible too.`;
-    },
-    'gen-tcpudp': (g) => {
-      const sizeNote = g.mode === 'stealth'
-        ? 'variable packet size'
-        : 'fixed packet size';
-      const patternNote = {
-        constant:       'fixed send intervals (constant rate)',
-        periodic_burst: `periodic bursts of ${g.burst_size ?? '?'} packets every ${Math.round((g.burst_interval ?? 0) * 1000)}ms`,
-        random:         'Poisson-distributed (random) intervals',
-      }[g.pattern] || 'fixed send intervals (constant rate)';
-      return `${sizeNote} with ${patternNote}` +
-        (g.mode === 'stealth' && g.pattern === 'random'
-          ? '; resembles real user traffic, statistically hard to distinguish from background noise.'
-          : '; produces a recognizable statistical fingerprint.');
-    },
+  // Colors/labels for the Live Network Analysis section (captured-packet
+  // protocol breakdown), distinct from the rate/latency colors above.
+  const PROTO_COLORS = {
+    http2:  '#0969da',
+    quic:   '#8250df',
+    mqtt:   '#1a7f37',
+    tcpudp: '#9a6700',
+    other:  '#9198a1',
   };
+  const PROTO_LABELS = {
+    http2:  'HTTP/2',
+    quic:   'QUIC',
+    mqtt:   'MQTT',
+    tcpudp: 'TCP/UDP',
+    other:  'Other',
+  };
+
+  // Failure Signals (Live): human-readable text + log-line styling per signal.
+  const SIGNAL_TEXT = {
+    tcp_rst:         'TCP RST detected',
+    mqtt_disconnect: 'MQTT DISCONNECT detected',
+    silence:         (d) => `went silent (${d})`,
+    recovered:       'traffic resumed',
+  };
+  const SIGNAL_LEVEL = {
+    tcp_rst:         'error',
+    mqtt_disconnect: 'error',
+    silence:         'error',
+    recovered:       'success',
+  };
+
+  // Bucket label order, must match analyzer/analyzer.py's SIZE_LABELS/GAP_LABELS
+  // exactly (the backend sends {label: count} objects, not arrays, so the
+  // dashboard - not the JSON - owns the display order).
+  const SIZE_LABELS = ['<64', '64-128', '128-256', '256-512', '512-1024', '1024-1500', '1500+'];
+  const GAP_LABELS  = ['<1ms', '1-5ms', '5-10ms', '10-25ms', '25-50ms', '50-100ms',
+                        '100-250ms', '250-500ms', '500-1000ms', '1000ms+'];
+
 
   // ── Formatting helpers ────────────────────────────────────────────────────
 
@@ -1153,6 +1247,15 @@
     return (b / 1048576).toFixed(1) + ' MB/s';
   }
 
+  // Same thresholds as fmtBytes, but for a cumulative total (no "/s" suffix) -
+  // used by the protocol-distribution row, which is not a rate.
+  function fmtBytesTotal(b) {
+    if (!b) return '0 B';
+    if (b < 1024)       return b + ' B';
+    if (b < 1048576)    return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+
   function fmtUptime(s) {
     if (!s) return '-';
     const h = Math.floor(s / 3600);
@@ -1163,6 +1266,12 @@
 
   function now() {
     return new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  // Same format as now(), but for a server-side capture timestamp (epoch seconds)
+  // rather than the browser's current time.
+  function fmtTime(epochSeconds) {
+    return new Date(epochSeconds * 1000).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
   }
 
   // ── Log ───────────────────────────────────────────────────────────────────
@@ -1494,6 +1603,12 @@
     // Live performance sparklines
     renderPerf(data);
 
+    // Live Network Analysis (real packet capture)
+    renderAnalysis(data);
+
+    // Failure Signals (Live)
+    renderFailureEvents(data);
+
     // Adaptive Control
     renderAdaptive(data);
 
@@ -1547,6 +1662,158 @@
     ctx.closePath();
     ctx.fillStyle = color + '1a'; // ~10% alpha (8-digit hex)
     ctx.fill();
+  }
+
+  // Draws one line per protocol into `canvas`, all sharing one scale (unlike
+  // drawSparkline, which scales each series to its own min/max) so the
+  // relative magnitude between protocols stays meaningful.
+  function drawMultiSeries(canvas, seriesMap, colorMap) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const labels = Object.keys(seriesMap).filter(k => seriesMap[k].some(v => v > 0));
+    if (labels.length === 0) {
+      ctx.fillStyle = COLOR_EMPTY;
+      ctx.font = '11px sans-serif';
+      ctx.fillText('No captured packets yet', 6, h / 2 + 4);
+      return;
+    }
+
+    const pad    = 3;
+    const maxLen = Math.max(...labels.map(k => seriesMap[k].length));
+    const max    = Math.max(...labels.flatMap(k => seriesMap[k]), 1);
+    const stepX  = maxLen > 1 ? (w - pad * 2) / (maxLen - 1) : 0;
+
+    const xAt = i => pad + i * stepX;
+    const yAt = v => h - pad - (v / max) * (h - pad * 2);
+
+    labels.forEach(label => {
+      const values = seriesMap[label];
+      ctx.beginPath();
+      values.forEach((v, i) => {
+        const x = xAt(i), y = yAt(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = colorMap[label] || COLOR_EMPTY;
+      ctx.lineWidth   = 1.5;
+      ctx.lineJoin    = 'round';
+      ctx.stroke();
+    });
+  }
+
+  // Draws one bar per entry in `counts` (no axis labels - the canvas is too
+  // small for 7-10 labels to stay legible; the dominant bucket's label is
+  // named in the verdict text next to the chart instead).
+  function drawHistogram(canvas, counts, color) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total <= 0) {
+      ctx.fillStyle = COLOR_EMPTY;
+      ctx.font = '10px sans-serif';
+      ctx.fillText('No data yet', 4, h / 2 + 3);
+      return;
+    }
+
+    const pad  = 2;
+    const gap  = 1;
+    const n    = counts.length;
+    const barW = (w - pad * 2 - gap * (n - 1)) / n;
+    const max  = Math.max(...counts, 0.0001);
+
+    counts.forEach((c, i) => {
+      const barH = Math.max((c / max) * (h - pad * 2), c > 0 ? 1 : 0);
+      const x = pad + i * (barW + gap);
+      const y = h - pad - barH;
+      ctx.globalAlpha = c > 0 ? 0.85 : 0.12;
+      ctx.fillStyle   = color;
+      ctx.fillRect(x, y, barW, barH);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Live Network Analysis: real captured-packet protocol distribution
+  // (by bytes) + multi-protocol throughput graph, from the analyzer sidecars'
+  // aggregated GET /analysis (proxied through the controller's /status).
+  // Failure Signals (Live): appends only newly-seen events (deduplicated by
+  // ts+protocol+signal) to the feed, same incremental pattern as addLog().
+  function renderFailureEvents(data) {
+    const events = (data.analysis || {}).failure_events || [];
+    const inner  = document.getElementById('failure-inner');
+    if (!inner) return;
+
+    let appended = false;
+    events.forEach(e => {
+      const key = `${e.ts}|${e.protocol}|${e.signal}`;
+      if (seenFailureKeys.has(key)) return;
+      seenFailureKeys.add(key);
+
+      if (!appended && inner.dataset.empty === 'true') inner.innerHTML = '';
+      appended = true;
+
+      const label   = PROTO_LABELS[e.protocol] || e.protocol;
+      const textTpl = SIGNAL_TEXT[e.signal];
+      const text    = typeof textTpl === 'function' ? textTpl(e.detail) : (textTpl || e.signal);
+      const level   = SIGNAL_LEVEL[e.signal] || 'info';
+
+      const line = document.createElement('div');
+      line.className = 'log-line ' + level;
+      line.innerHTML = `<span class="log-time">${fmtTime(e.ts)}</span><span class="log-msg">${label}: ${text}</span>`;
+      inner.appendChild(line);
+    });
+
+    if (appended) {
+      inner.dataset.empty = 'false';
+      while (inner.children.length > 100) inner.removeChild(inner.firstChild);
+      const box = document.getElementById('failure-box');
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  function renderAnalysis(data) {
+    const analysis  = data.analysis || {};
+    const protocols = analysis.protocols || {};
+    const order     = ['http2', 'quic', 'mqtt', 'tcpudp', 'other'];
+
+    const totalBytes = order.reduce((sum, k) => sum + (protocols[k]?.bytes || 0), 0);
+
+    const distEl = document.getElementById('proto-dist-rows');
+    if (distEl) {
+      const rows = order
+        .filter(k => protocols[k] && protocols[k].packets > 0)
+        .map(k => {
+          const p   = protocols[k];
+          const pct = totalBytes > 0 ? (p.bytes / totalBytes * 100) : 0;
+          return `<div class="dist-row">
+            <div class="dist-label">${PROTO_LABELS[k] || k}</div>
+            <div class="dist-bar-track"><div class="dist-bar-fill" style="width:${pct.toFixed(1)}%;background:${PROTO_COLORS[k] || COLOR_EMPTY}"></div></div>
+            <div class="dist-pct">${pct.toFixed(1)}%</div>
+            <div class="dist-count">${fmtNum(p.packets)} pkts / ${fmtBytesTotal(p.bytes)}</div>
+          </div>`;
+        }).join('');
+      distEl.innerHTML = rows ||
+        '<div style="font-size:12px;color:var(--text-light);padding:8px 0">No captured packets yet.</div>';
+    }
+
+    const ioGraph   = analysis.io_graph || [];
+    const seriesMap = {};
+    ['http2', 'quic', 'mqtt', 'tcpudp'].forEach(k => {
+      seriesMap[k] = ioGraph.map(point => (point[k] ? point[k].bytes : 0));
+    });
+    const ioCanvas = document.getElementById('analysis-io-graph');
+    if (ioCanvas) drawMultiSeries(ioCanvas, seriesMap, PROTO_COLORS);
+
+    const analyzers = analysis.analyzers || {};
+    const names     = Object.keys(analyzers);
+    const statusEl  = document.getElementById('analyzer-status');
+    if (statusEl) {
+      statusEl.textContent = names.length === 0
+        ? 'No analyzer sidecars reporting yet - capture may still be starting up, or the analyzer services are not running.'
+        : 'Capturing: ' + names.map(n => `${n} (${analyzers[n].iface}, ${analyzers[n].age_seconds}s ago)`).join('  ·  ');
+    }
   }
 
   function renderPerf(data) {
@@ -1611,44 +1878,63 @@
     }
   }
 
+  // Finds the dominant bucket in a {label -> count} histogram (as parallel
+  // `labels`/`counts` arrays, same order) and its share of the total.
+  function histPeak(labels, counts) {
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total <= 0) return null;
+    let bestIdx = 0;
+    counts.forEach((c, i) => { if (c > counts[bestIdx]) bestIdx = i; });
+    return { label: labels[bestIdx], pct: (counts[bestIdx] / total) * 100 };
+  }
+
+  // A concentrated peak in *both* histograms means a repeatable, recognizable
+  // fingerprint (e.g. TCP/UDP normal mode); a spread-out shape in both means
+  // the traffic is statistically close to background noise (stealth mode).
+  function fingerprintVerdict(sizePeak, gapPeak) {
+    if (!sizePeak || !gapPeak) return 'Waiting for captured packets...';
+    const summary = `size ${sizePeak.pct.toFixed(0)}% in ${sizePeak.label}, ` +
+                     `gap ${gapPeak.pct.toFixed(0)}% in ${gapPeak.label}`;
+    if (sizePeak.pct >= 60 && gapPeak.pct >= 60)
+      return `${summary} — clear, repeatable fingerprint.`;
+    if (sizePeak.pct < 35 && gapPeak.pct < 35)
+      return `${summary} — spread out, hard to distinguish from background noise.`;
+    return `${summary} — partially recognizable.`;
+  }
+
   function renderAttacker(data) {
-    const gens   = data.generators || {};
-    const rowsEl = document.getElementById('attacker-rows');
+    const analysis = data.analysis || {};
+    const sizeHist = analysis.size_hist || {};
+    const gapHist  = analysis.gap_hist  || {};
+    const rowsEl   = document.getElementById('attacker-rows');
     if (!rowsEl) return;
 
-    rowsEl.innerHTML = ['gen-http2','gen-quic','gen-mqtt','gen-tcpudp'].map(name => {
-      const g     = gens[name] || {};
-      const label = PROTOCOL_LABELS[name] || name;
+    const protocols = ['http2', 'quic', 'mqtt', 'tcpudp'];
 
-      let size, rate;
-      if (name === 'gen-tcpudp') {
-        size = (g.mode === 'stealth')
-          ? `${fmtNum(g.min_size)}-${fmtNum(g.max_size)} B`
-          : `${fmtNum(g.packet_size)} B`;
-        rate = (g.tcp_rate || 0) + (g.udp_rate || 0);
-      } else {
-        size = (g.payload_size !== undefined) ? `${fmtNum(g.payload_size)} B` : '-';
-        rate = g.rate || 0;
+    rowsEl.innerHTML = protocols.map(p => `
+      <div class="gen-row gen-row-auto" style="grid-template-columns: 80px 260px 280px 1fr;">
+        <div class="gen-name">${PROTO_LABELS[p] || p}</div>
+        <canvas class="hist-canvas" id="hist-size-${p}" width="260" height="50"></canvas>
+        <canvas class="hist-canvas" id="hist-gap-${p}" width="280" height="50"></canvas>
+        <div class="fp-note" id="verdict-${p}"></div>
+      </div>`).join('');
+
+    protocols.forEach(p => {
+      const sizeCounts = SIZE_LABELS.map(l => (sizeHist[p] || {})[l] || 0);
+      const gapCounts  = GAP_LABELS.map(l => (gapHist[p]  || {})[l] || 0);
+
+      const sizeCanvas = document.getElementById('hist-size-' + p);
+      const gapCanvas  = document.getElementById('hist-gap-' + p);
+      if (sizeCanvas) drawHistogram(sizeCanvas, sizeCounts, PROTO_COLORS[p]);
+      if (gapCanvas)  drawHistogram(gapCanvas,  gapCounts,  PROTO_COLORS[p]);
+
+      const verdictEl = document.getElementById('verdict-' + p);
+      if (verdictEl) {
+        verdictEl.textContent = fingerprintVerdict(
+          histPeak(SIZE_LABELS, sizeCounts), histPeak(GAP_LABELS, gapCounts)
+        );
       }
-
-      const interval = (g.mode === 'stealth')
-        ? `~${Math.round((g.mean_interval || 0) * 1000)} ms (Poisson)`
-        : (rate > 0 ? (1000 / rate).toFixed(0) + ' ms' : '-');
-
-      const latency = (g.latency_ms !== undefined && g.latency_ms !== null)
-        ? Number(g.latency_ms).toFixed(1) + ' ms'
-        : '-';
-
-      const note = FINGERPRINT_NOTES[name] ? FINGERPRINT_NOTES[name](g) : '-';
-
-      return `<div class="gen-row gen-row-auto" style="grid-template-columns: 110px 100px 110px 70px 1fr;">
-        <div class="gen-name">${label}</div>
-        <div class="packets-count">${size}</div>
-        <div class="packets-count">${interval}</div>
-        <div class="packets-count">${latency}</div>
-        <div class="fp-note">${note}</div>
-      </div>`;
-    }).join('');
+    });
   }
 
   let faultTimers = {};

@@ -155,3 +155,66 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+
+  # Network Analyzers (live packet-capture sidecars). Each shares one target
+  # container's network namespace (network_mode: "service:<target>") instead of
+  # sniffing the mic-net bridge directly, since Docker Desktop on macOS/Windows
+  # exposes no host-visible bridge interface (see docs/WIRESHARK_GUIDE.md) - this
+  # works identically on macOS and Linux. Each analyzer only sees its own
+  # target's traffic; the Metrics Collector sums all of them into one live
+  # picture (GET /analysis on :9090), exposed through the dashboard.
+  analyzer-http2:
+    build: ./analyzer
+    container_name: analyzer-http2
+    network_mode: "service:target-http2"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-http2
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-http2
+      - metrics
+    restart: unless-stopped
+
+  analyzer-quic:
+    build: ./analyzer
+    container_name: analyzer-quic
+    network_mode: "service:target-quic"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-quic
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-quic
+      - metrics
+    restart: unless-stopped
+
+  analyzer-mqtt:
+    build: ./analyzer
+    container_name: analyzer-mqtt
+    network_mode: "service:mosquitto"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: mosquitto
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - mosquitto
+      - metrics
+    restart: unless-stopped
+
+  analyzer-tcpudp:
+    build: ./analyzer
+    container_name: analyzer-tcpudp
+    network_mode: "service:target-tcpudp"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-tcpudp
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-tcpudp
+      - metrics
+    restart: unless-stopped

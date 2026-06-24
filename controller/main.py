@@ -175,6 +175,11 @@ class StatusResponse(BaseModel):
     ramp_status: Optional[RampStatus] = Field(None, description="Active warmup/cooldown ramp, if any")
     generators: dict[str, Any] = Field(..., description="Live /status response of each generator")
     metrics: dict[str, Any] = Field(..., description="Aggregated /metrics response of the Metrics Collector")
+    analysis: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Aggregated live network-analysis snapshot (real captured protocol "
+                     "distribution + I/O graph) from the network-analyzer sidecars, if any are running.",
+    )
     log: list[LogEntry]
 
 
@@ -622,7 +627,8 @@ async def status():
     for name, url in GENERATORS.items():
         gen_statuses[name] = await _call("get", f"{url}/status")
 
-    metrics = await _call("get", f"{METRICS_URL}/metrics")
+    metrics  = await _call("get", f"{METRICS_URL}/metrics")
+    analysis = await _call("get", f"{METRICS_URL}/analysis")
 
     return {
         "running":          state["running"],
@@ -633,6 +639,7 @@ async def status():
         "ramp_status":      state["ramp_status"],
         "generators":       gen_statuses,
         "metrics":          metrics,
+        "analysis":         analysis if "error" not in analysis else {},
         "log":              log_entries[-50:],
     }
 
