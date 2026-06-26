@@ -12,9 +12,13 @@ The overall sending cadence is controlled by `pattern`: 'constant' (steady
 `rate`), 'periodic_burst' (alternates between the base `rate` and a much
 higher `burst_rate` for `burst_duration` seconds every `burst_interval`
 seconds - useful for demonstrating multiplexed-stream bursts in Wireshark
-I/O graphs), or 'random' (exponentially-distributed/Poisson gaps between
+I/O graphs), 'random' (exponentially-distributed/Poisson gaps between
 sends, with the same mean rate as 'constant' - mimics bursty, human-driven
-request traffic for the Temporal Analysis task).
+request traffic for the Temporal Analysis task), or 'ramp' (the effective
+rate increases linearly from `ramp_start_rate` to `ramp_end_rate` over
+`ramp_duration` seconds, then holds at `ramp_end_rate` - the assignment's
+"ramping (linear increase over time)" sending pattern, applied per-phase
+and independent of the controller's global warmup/cooldown ramp).
 
 Exposes a small REST API so the Traffic Controller can start/stop/reconfigure
 this generator at runtime and read its live statistics (used, among other
@@ -24,7 +28,7 @@ things, as the latency signal for Adaptive Control).
 import os, time, asyncio, random, threading
 from typing import Optional
 
-import requests as req_sync
+
 import httpx
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,10 +54,13 @@ state = {
     "concurrent_streams": 3,
     "get_paths":          ["/"],       # target paths for GET requests, one is chosen at random per request
     "post_paths":         ["/data"],   # target paths for POST requests, one is chosen at random per request
-    "pattern":            "constant",  # "constant" | "periodic_burst"
+    "pattern":            "constant",  # "constant" | "periodic_burst" | "random" | "ramp"
     "burst_rate":         400,         # requests/sec used during a burst window
     "burst_duration":     5,           # seconds: length of each burst window
     "burst_interval":     30,          # seconds: period between burst windows
+    "ramp_start_rate":    0,           # requests/sec at the start of a 'ramp' pattern
+    "ramp_end_rate":      100,         # requests/sec at the end of a 'ramp' pattern
+    "ramp_duration":      60,          # seconds: how long the linear ramp takes
     "packets_sent":       0,
     "bytes_sent":         0,
     "errors":             0,
@@ -66,6 +73,13 @@ state = {
 _lock = threading.Lock()
 _bytes_window: list[tuple[float, int]] = []
 _latency_window: list[tuple[float, float]] = []
+
+# Wall-clock timestamp at which the current 'ramp' pattern run began. Reset
+# whenever `pattern` transitions into 'ramp' (from something else) or the
+# generator is (re)started while already in 'ramp' mode, so each ramp run
+# starts counting from 0 again rather than picking up mid-ramp.
+_ramp_started_at: Optional[float] = None
+_last_pattern: Optional[str] = None
 
 # Ring buffer of recent metric snapshots (one per _metrics() tick, ~5s apart),
 # capped to the last 5 minutes. Exposed via /status so the dashboard can draw
@@ -116,8 +130,11 @@ class GeneratorConfig(BaseModel):
         None,
         description="Overall sending cadence: 'constant' (steady `rate`), 'periodic_burst' "
                      "(alternates between `rate` and `burst_rate` for `burst_duration` seconds "
-                     "every `burst_interval` seconds), or 'random' (exponentially-distributed/"
-                     "Poisson gaps between sends, same mean rate as 'constant')."
+                     "every `burst_interval` seconds), 'random' (exponentially-distributed/"
+                     "Poisson gaps between sends, same mean rate as 'constant'), or 'ramp' "
+                     "(effective rate increases linearly from `ramp_start_rate` to "
+                     "`ramp_end_rate` over `ramp_duration` seconds, then holds at "
+                     "`ramp_end_rate`)."
     )
     burst_rate: Optional[float] = Field(
         None, ge=0,
@@ -131,6 +148,22 @@ class GeneratorConfig(BaseModel):
     burst_interval: Optional[float] = Field(
         None, ge=0,
         description="Period (seconds) between the start of consecutive burst windows."
+    )
+    ramp_start_rate: Optional[float] = Field(
+        None, ge=0,
+        description="Request rate (requests/sec) at the start of a linear ramp, when "
+                     "pattern='ramp'."
+    )
+    ramp_end_rate: Optional[float] = Field(
+        None, ge=0,
+        description="Request rate (requests/sec) at the end of a linear ramp, when "
+                     "pattern='ramp'. The rate holds at this value once `ramp_duration` "
+                     "has elapsed."
+    )
+    ramp_duration: Optional[float] = Field(
+        None, gt=0,
+        description="Duration (seconds) over which the rate increases linearly from "
+                     "`ramp_start_rate` to `ramp_end_rate`, when pattern='ramp'."
     )
     fault_rate: Optional[float] = Field(
         None, ge=0.0, le=1.0,
@@ -158,6 +191,13 @@ class StatusResponse(BaseModel):
     burst_interval: float
     burst_active: bool = Field(
         False, description="True if a burst window is currently active (pattern='periodic_burst' only)."
+    )
+    ramp_start_rate: float
+    ramp_end_rate: float
+    ramp_duration: float
+    ramp_progress: float = Field(
+        0.0, description="Fraction (0.0-1.0) of `ramp_duration` elapsed since the current "
+                          "'ramp' pattern run started (pattern='ramp' only; 0.0 otherwise)."
     )
     packets_sent: int
     bytes_sent: int
@@ -234,6 +274,44 @@ def _is_burst_active(pattern: str, burst_duration: float, burst_interval: float)
     return (time.time() % burst_interval) < burst_duration
 
 
+def _ramp_progress(pattern: str, ramp_duration: float) -> float:
+    """Returns the fraction (0.0-1.0) of `ramp_duration` elapsed since the current
+    'ramp' run started. Tracks the start time in `_ramp_started_at`, resetting it
+    whenever `pattern` just transitioned into 'ramp' (see _note_pattern_transition).
+    Stateless with respect to wall-clock restarts: if the process restarts mid-ramp,
+    the anchor is simply re-set, restarting the ramp from 0 rather than guessing."""
+    global _ramp_started_at
+    if pattern != "ramp" or ramp_duration <= 0:
+        return 0.0
+    if _ramp_started_at is None:
+        _ramp_started_at = time.time()
+    elapsed = time.time() - _ramp_started_at
+    return max(0.0, min(1.0, elapsed / ramp_duration))
+
+
+def _note_pattern_transition(pattern: str):
+    """Resets the ramp anchor whenever `pattern` transitions into 'ramp' from
+    something else, so each fresh ramp run starts counting from 0 again."""
+    global _last_pattern, _ramp_started_at
+    if pattern == "ramp" and _last_pattern != "ramp":
+        _ramp_started_at = time.time()
+    elif pattern != "ramp":
+        _ramp_started_at = None
+    _last_pattern = pattern
+
+
+def _ramp_effective_rate(ramp_start_rate: float, ramp_end_rate: float, progress: float) -> float:
+    """Linearly interpolates between ramp_start_rate and ramp_end_rate at the
+    given progress fraction (0.0-1.0). This is the per-phase, per-protocol
+    counterpart to the controller's global warmup/cooldown ramp: that one
+    ramps the generic `rate` field for *all* generators in lockstep from/to 0
+    at the very start/end of an entire profile run; this one ramps a single
+    generator's own rate between two arbitrary values, for the duration of
+    whichever phase sets pattern='ramp', and can run alongside other
+    generators that are simultaneously constant/bursty/random."""
+    return ramp_start_rate + (ramp_end_rate - ramp_start_rate) * progress
+
+
 async def _generate():
     # httpx HTTP/2 client: keeps one TCP connection, multiplexes streams
     async with httpx.AsyncClient(http2=True, verify=False) as client:
@@ -246,20 +324,33 @@ async def _generate():
                 burst_rate     = state["burst_rate"]
                 burst_duration = state["burst_duration"]
                 burst_interval = state["burst_interval"]
+                ramp_start     = state["ramp_start_rate"]
+                ramp_end       = state["ramp_end_rate"]
+                ramp_duration  = state["ramp_duration"]
 
-            if not running or rate <= 0:
+            _note_pattern_transition(pattern)
+
+            if not running:
                 await asyncio.sleep(0.1)
                 continue
 
-            effective_rate = rate
-            if _is_burst_active(pattern, burst_duration, burst_interval):
-                effective_rate = max(rate, burst_rate)
+            if pattern == "ramp":
+                progress = _ramp_progress(pattern, ramp_duration)
+                effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
+            else:
+                effective_rate = rate
+                if _is_burst_active(pattern, burst_duration, burst_interval):
+                    effective_rate = max(rate, burst_rate)
+
+            if effective_rate <= 0:
+                await asyncio.sleep(0.1)
+                continue
 
             # Fire `streams` concurrent requests, then wait for the right interval
             tasks = [_send_one(client) for _ in range(streams)]
             await asyncio.gather(*tasks, return_exceptions=True)
 
-            interval = streams / effective_rate if effective_rate > 0 else 0.1
+            interval = streams / effective_rate
             if pattern == "random":
                 # Exponential inter-arrival time => Poisson process, same mean rate.
                 await asyncio.sleep(random.expovariate(1.0 / interval))
@@ -302,7 +393,8 @@ async def _metrics():
             }
 
         try:
-            req_sync.post(f"{METRICS_URL}/update", json=payload, timeout=2)
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                await client.post(f"{METRICS_URL}/update", json=payload)
         except Exception:
             pass
 
@@ -338,8 +430,9 @@ async def stop():
 
 @app.patch("/config", response_model=OkResponse, summary="Update configuration at runtime",
            description="Updates any subset of: rate, payload_size, method_get_pct, concurrent_streams, "
-                        "get_paths, post_paths, pattern ('constant'|'periodic_burst'|'random'), burst_rate, "
-                        "burst_duration, burst_interval, fault_rate, extra_latency_ms.")
+                        "get_paths, post_paths, pattern ('constant'|'periodic_burst'|'random'|'ramp'), "
+                        "burst_rate, burst_duration, burst_interval, ramp_start_rate, ramp_end_rate, "
+                        "ramp_duration, fault_rate, extra_latency_ms.")
 async def config(body: GeneratorConfig = Body(...)):
     with _lock:
         state.update({k: v for k, v in body.model_dump(exclude_none=True).items() if k in state})
@@ -353,6 +446,7 @@ async def status():
         result["burst_active"] = _is_burst_active(
             result["pattern"], result["burst_duration"], result["burst_interval"]
         )
+        result["ramp_progress"] = _ramp_progress(result["pattern"], result["ramp_duration"])
         result["history"] = list(_history)
         return result
 

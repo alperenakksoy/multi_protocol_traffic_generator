@@ -18,6 +18,11 @@ Independently of `mode`, a `pattern` controls the overall sending cadence
   periodic_burst -> sends `burst_size` packets back-to-back, then idles for
                      `burst_interval` seconds, repeating periodically
   random         -> exponentially-distributed (Poisson) gaps between sends
+  ramp           -> total packet rate increases linearly from `ramp_start_rate`
+                     to `ramp_end_rate` (packets/sec, combined TCP+UDP) over
+                     `ramp_duration` seconds, then holds at `ramp_end_rate`;
+                     the combined rate is split into TCP/UDP using `tcp_ratio`,
+                     same as the other patterns
 
 Exposes a small REST API so the Traffic Controller can start/stop/reconfigure
 this generator at runtime and read its live statistics (including TCP connect
@@ -57,9 +62,12 @@ state = {
     "min_size":     64,         # bytes (stealth mode)
     "max_size":     1400,       # bytes (stealth mode)
     "tcp_ratio":    60,         # % TCP, rest UDP
-    "pattern":      "constant", # "constant" | "periodic_burst" | "random"
+    "pattern":      "constant", # "constant" | "periodic_burst" | "random" | "ramp"
     "burst_size":     10,       # packets per burst (periodic_burst)
     "burst_interval": 1.0,      # seconds to idle between bursts (periodic_burst)
+    "ramp_start_rate":  0,      # combined TCP+UDP packets/sec at the start of a 'ramp' pattern
+    "ramp_end_rate":    50,     # combined TCP+UDP packets/sec at the end of a 'ramp' pattern
+    "ramp_duration":    60,     # seconds: how long the linear ramp takes
     "packets_sent": 0,
     "bytes_sent":   0,
     "errors":       0,
@@ -72,6 +80,11 @@ state = {
 _lock = threading.Lock()
 _bytes_window: list[tuple[float, int]] = []
 _latency_window: list[tuple[float, float]] = []
+
+# Wall-clock timestamp at which the current 'ramp' pattern run began. See the
+# HTTP/2 generator for the full rationale; same mechanism here.
+_ramp_started_at: Optional[float] = None
+_last_pattern: Optional[str] = None
 
 # Ring buffer of recent metric snapshots (one per _metrics_loop() tick, ~5s apart),
 # capped to the last 5 minutes. Exposed via /status so the dashboard can draw
@@ -96,8 +109,11 @@ class GeneratorConfig(BaseModel):
         None,
         description="Overall sending cadence: 'constant' (one packet per interval derived from "
                      "tcp_rate/udp_rate), 'periodic_burst' (burst_size packets back-to-back, then "
-                     "idle for burst_interval seconds), or 'random' (Poisson/exponentially-"
-                     "distributed gaps between sends)."
+                     "idle for burst_interval seconds), 'random' (Poisson/exponentially-"
+                     "distributed gaps between sends), or 'ramp' (combined TCP+UDP packet rate "
+                     "increases linearly from `ramp_start_rate` to `ramp_end_rate` over "
+                     "`ramp_duration` seconds, then holds at `ramp_end_rate`; split into "
+                     "TCP/UDP using `tcp_ratio`)."
     )
     tcp_rate: Optional[float] = Field(None, ge=0, description="TCP packets/sec target (used by 'constant'/'random' patterns).")
     udp_rate: Optional[float] = Field(None, ge=0, description="UDP packets/sec target (used by 'constant'/'random' patterns).")
@@ -113,6 +129,20 @@ class GeneratorConfig(BaseModel):
     burst_interval: Optional[float] = Field(
         None, ge=0,
         description="Seconds to idle between bursts, when pattern='periodic_burst'."
+    )
+    ramp_start_rate: Optional[float] = Field(
+        None, ge=0,
+        description="Combined TCP+UDP packets/sec at the start of a linear ramp, when pattern='ramp'."
+    )
+    ramp_end_rate: Optional[float] = Field(
+        None, ge=0,
+        description="Combined TCP+UDP packets/sec at the end of a linear ramp, when pattern='ramp'. "
+                     "Holds at this value once `ramp_duration` has elapsed."
+    )
+    ramp_duration: Optional[float] = Field(
+        None, gt=0,
+        description="Duration (seconds) over which the combined rate increases linearly from "
+                     "`ramp_start_rate` to `ramp_end_rate`, when pattern='ramp'."
     )
     fault_rate: Optional[float] = Field(
         None, ge=0.0, le=1.0,
@@ -139,6 +169,13 @@ class StatusResponse(BaseModel):
     tcp_ratio: int
     burst_size: int
     burst_interval: float
+    ramp_start_rate: float
+    ramp_end_rate: float
+    ramp_duration: float
+    ramp_progress: float = Field(
+        0.0, description="Fraction (0.0-1.0) of `ramp_duration` elapsed since the current "
+                          "'ramp' pattern run started (pattern='ramp' only; 0.0 otherwise)."
+    )
     packets_sent: int
     bytes_sent: int
     errors: int
@@ -224,6 +261,39 @@ def _send_udp(data: bytes):
         s.close()
 
 
+# ── Pattern helpers (ramp progress tracking) ───────────────────────────────────
+
+def _ramp_progress(pattern: str, ramp_duration: float) -> float:
+    """Returns the fraction (0.0-1.0) of `ramp_duration` elapsed since the current
+    'ramp' run started. See the HTTP/2 generator for the full rationale."""
+    global _ramp_started_at
+    if pattern != "ramp" or ramp_duration <= 0:
+        return 0.0
+    if _ramp_started_at is None:
+        _ramp_started_at = time.time()
+    elapsed = time.time() - _ramp_started_at
+    return max(0.0, min(1.0, elapsed / ramp_duration))
+
+
+def _note_pattern_transition(pattern: str):
+    """Resets the ramp anchor whenever `pattern` transitions into 'ramp'."""
+    global _last_pattern, _ramp_started_at
+    if pattern == "ramp" and _last_pattern != "ramp":
+        _ramp_started_at = time.time()
+    elif pattern != "ramp":
+        _ramp_started_at = None
+    _last_pattern = pattern
+
+
+def _ramp_effective_rate(ramp_start_rate: float, ramp_end_rate: float, progress: float) -> float:
+    """Linearly interpolates between ramp_start_rate and ramp_end_rate. Used here as
+    a single combined TCP+UDP packets/sec target; the per-packet protocol choice
+    still comes from `tcp_ratio` inside _normal_params/_stealth_params, so the
+    ramp only overrides the *interval* those helpers would otherwise compute from
+    the fixed tcp_rate/udp_rate."""
+    return ramp_start_rate + (ramp_end_rate - ramp_start_rate) * progress
+
+
 # ── Traffic loop ──────────────────────────────────────────────────────────────
 
 def _send_loop():
@@ -236,10 +306,28 @@ def _send_loop():
             extra_latency  = state["extra_latency_ms"]
             burst_size     = max(1, state["burst_size"])
             burst_interval = max(0.0, state["burst_interval"])
+            ramp_start     = state["ramp_start_rate"]
+            ramp_end       = state["ramp_end_rate"]
+            ramp_duration  = state["ramp_duration"]
+
+        _note_pattern_transition(pattern)
 
         if not running:
             time.sleep(0.1)
             continue
+
+        # If ramping, compute one combined-rate interval up front for this
+        # iteration's packet(s); _normal_params/_stealth_params still supply
+        # packet size and TCP/UDP protocol choice (via tcp_ratio), but their
+        # own rate-derived interval is overridden below when pattern='ramp'.
+        ramp_interval = None
+        if pattern == "ramp":
+            progress = _ramp_progress(pattern, ramp_duration)
+            effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
+            if effective_rate <= 0:
+                time.sleep(0.1)
+                continue
+            ramp_interval = 1.0 / effective_rate
 
         # `pattern` controls the overall sending cadence; `mode` (handled inside
         # _normal_params/_stealth_params) independently controls packet size and
@@ -250,6 +338,8 @@ def _send_loop():
             size, interval, proto = (
                 _normal_params() if mode == "normal" else _stealth_params()
             )
+            if ramp_interval is not None:
+                interval = ramp_interval
 
             if extra_latency > 0:
                 time.sleep(extra_latency / 1000)
@@ -285,16 +375,17 @@ def _send_loop():
 def _metrics_loop():
     while True:
         time.sleep(5)
-        now    = time.time()
-        recent = [b for ts, b in _bytes_window if now - ts <= 10]
-        _bytes_window[:] = [(ts, b) for ts, b in _bytes_window if now - ts <= 10]
-        rate_bps = sum(recent) / 10 if recent else 0
-
-        recent_lat = [l for ts, l in _latency_window if now - ts <= 10]
-        _latency_window[:] = [(ts, l) for ts, l in _latency_window if now - ts <= 10]
-        avg_latency = sum(recent_lat) / len(recent_lat) if recent_lat else 0
-
+        now = time.time()
         with _lock:
+            # list operations inside lock — prevents RuntimeError from concurrent .append()
+            recent = [b for ts, b in _bytes_window if now - ts <= 10]
+            _bytes_window[:] = [(ts, b) for ts, b in _bytes_window if now - ts <= 10]
+            rate_bps = sum(recent) / 10 if recent else 0
+
+            recent_lat = [l for ts, l in _latency_window if now - ts <= 10]
+            _latency_window[:] = [(ts, l) for ts, l in _latency_window if now - ts <= 10]
+            avg_latency = sum(recent_lat) / len(recent_lat) if recent_lat else 0
+
             state["rate_bps"]   = int(rate_bps)
             state["latency_ms"] = round(avg_latency, 2)
             _history.append({
@@ -346,9 +437,10 @@ async def stop():
 
 @app.patch("/config", response_model=OkResponse, summary="Update configuration at runtime",
            description="Updates any subset of: mode ('normal'|'stealth'), pattern "
-                        "('constant'|'periodic_burst'|'random'), tcp_rate, udp_rate, "
+                        "('constant'|'periodic_burst'|'random'|'ramp'), tcp_rate, udp_rate, "
                         "packet_size, mean_interval, min_size, max_size, tcp_ratio, "
-                        "burst_size, burst_interval, fault_rate, extra_latency_ms.")
+                        "burst_size, burst_interval, ramp_start_rate, ramp_end_rate, "
+                        "ramp_duration, fault_rate, extra_latency_ms.")
 async def config(body: GeneratorConfig = Body(...)):
     with _lock:
         state.update({k: v for k, v in body.model_dump(exclude_none=True).items() if k in state})
@@ -360,6 +452,7 @@ async def config(body: GeneratorConfig = Body(...)):
 async def status():
     with _lock:
         result = dict(state)
+        result["ramp_progress"] = _ramp_progress(result["pattern"], result["ramp_duration"])
         result["history"] = list(_history)
         return result
 
