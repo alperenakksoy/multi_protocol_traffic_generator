@@ -1302,6 +1302,7 @@
   let pollInterval = null;
   let seenLogCount = 0;
   const seenFailureKeys = new Set();
+  const _toggleLock = {};
 
   // ── Tab switching ─────────────────────────────────────────────────────────
 
@@ -1709,8 +1710,8 @@
       document.getElementById('err-' + name).textContent  = fmtNum(g.errors);
 
       const chk = document.getElementById('toggle-' + name);
-      if (document.activeElement !== chk) chk.checked = isOn;
-
+      const locked = (_toggleLock[name] || 0) > Date.now();
+      if (!locked && document.activeElement !== chk) chk.checked = isOn;
       if (g.rate !== undefined) {
         const slider = document.getElementById('range-' + name);
         const disp   = document.getElementById('rate-' + name);
@@ -2401,13 +2402,25 @@
     addLog(now(), `TCP/UDP mode → ${mode}`, mode === 'stealth' ? 'success' : 'info');
   }
 
-  async function toggleGen(name, checked) {
-    try {
-      const endpoint = checked ? '/start' : '/stop';
-      await fetch(`${API}/generator/${name}${endpoint}`, {method: 'POST'});
+async function toggleGen(name, checked) {
+  _toggleLock[name] = Date.now() + 6000;
+  try {
+    const endpoint = checked ? '/start' : '/stop';
+    const res = await fetch(`${API}/generator/${name}${endpoint}`, {method: 'POST'});
+    if (res.ok) {
       addLog(now(), `${name} ${checked ? 'started' : 'stopped'}`);
-    } catch(e) {}
+    } else {
+      const chk = document.getElementById('toggle-' + name);
+      if (chk) chk.checked = !checked;
+      _toggleLock[name] = 0;
+      addLog(now(), `${name} unreachable — check container`, 'error');
+    }
+  } catch(e) {
+    const chk = document.getElementById('toggle-' + name);
+    if (chk) chk.checked = !checked;
+    _toggleLock[name] = 0;
   }
+}
 
   async function patchGen(name, body) {
     try {
