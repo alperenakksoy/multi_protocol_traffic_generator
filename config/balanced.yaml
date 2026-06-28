@@ -8,7 +8,7 @@ global:
 
 phases:
   - name: balanced_constant
-    duration: 100
+    duration: 75
     description: "Even distribution, constant rate; ideal for protocol hierarchy analysis"
     protocols:
       http2:
@@ -43,7 +43,7 @@ phases:
         packet_size: 256
 
   - name: balanced_with_stealth
-    duration: 100
+    duration: 75
     description: "Stealth mode active; for behavioral fingerprinting analysis"
     protocols:
       http2:
@@ -70,8 +70,48 @@ phases:
         tcp_ratio: 60
         pattern: random        # Poisson inter-arrival on top of stealth size/timing
 
+  - name: balanced_ramp
+    duration: 75
+    description: >
+      Linear ramp ("ramping (linear increase over time)" sending pattern):
+      every protocol's effective rate climbs linearly from ramp_start_rate to
+      ramp_end_rate over ramp_duration seconds, then holds - directly visible
+      as a rising slope in a Wireshark I/O graph, independent of the global
+      warmup/cooldown ramp.
+    protocols:
+      http2:
+        payload_size: 2048
+        concurrent_streams: 3
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 120
+        ramp_duration: 60
+      quic:
+        payload_size: 1024
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 80
+        ramp_duration: 60
+      mqtt:
+        payload_size: 256
+        qos_distribution:
+          0: 40
+          1: 40
+          2: 20
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 100
+        ramp_duration: 60
+      tcpudp:
+        mode: normal
+        tcp_ratio: 60
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 60
+        ramp_duration: 60
+
   - name: balanced_adaptive
-    duration: 100
+    duration: 75
     description: "Adaptive Control active; system automatically adjusts rates based on error rate/latency"
     adaptive_control:
       enabled: true

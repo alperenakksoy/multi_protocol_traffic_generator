@@ -8,7 +8,7 @@ global:
 
 phases:
   - name: http2_dominant
-    duration: 120
+    duration: 60
     protocols:
       http2:
         rate: 150            # 150 requests/sec
@@ -31,6 +31,31 @@ phases:
       udp:
         rate: 2
 
+  - name: http2_ramp
+    duration: 60
+    description: >
+      "ramping (linear increase over time)" sending pattern on HTTP/2 and
+      QUIC: rate climbs linearly from ramp_start_rate to ramp_end_rate over
+      ramp_duration seconds, then holds - visible as a rising slope in the
+      Wireshark I/O graph, distinct from periodic bursts.
+    protocols:
+      http2:
+        payload_size: 4096
+        concurrent_streams: 6
+        pattern: ramp
+        ramp_start_rate: 10
+        ramp_end_rate: 200
+        ramp_duration: 50
+      quic:
+        payload_size: 1024
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 100
+        ramp_duration: 50
+      mqtt:
+        rate: 5
+        qos: 0
+
   - name: http2_burst
     duration: 120
     protocols:
@@ -42,6 +67,13 @@ phases:
         burst_duration: 5    # 5 second burst
         burst_interval: 30   # every 30 seconds
         concurrent_streams: 10
+      quic:
+        rate: 20             # base rate
+        payload_size: 1024
+        pattern: periodic_burst
+        burst_rate: 150      # ~7.5x during burst
+        burst_duration: 5
+        burst_interval: 30
       mqtt:
         rate: 8
         qos: 1

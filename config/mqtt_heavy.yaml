@@ -8,7 +8,7 @@ global:
 
 phases:
   - name: mqtt_qos0_heavy
-    duration: 90
+    duration: 70
     description: "QoS 0, fire and forget. One packet per message. Fast, unreliable."
     protocols:
       mqtt:
@@ -30,7 +30,7 @@ phases:
         rate: 2
 
   - name: mqtt_qos2_comparison
-    duration: 90
+    duration: 70
     description: "QoS 2, exactly once. Four packets per message. In Wireshark: 4x more traffic."
     protocols:
       mqtt:
@@ -50,7 +50,7 @@ phases:
         rate: 2
 
   - name: mqtt_mixed
-    duration: 90
+    duration: 70
     description: "Mixed QoS levels, as in a real IoT system"
     protocols:
       mqtt:
@@ -70,3 +70,44 @@ phases:
         rate: 15
       quic:
         rate: 5
+
+  - name: mqtt_burst
+    duration: 45
+    description: >
+      periodic_burst sending pattern: publish rate alternates between a low
+      base rate and a much higher burst_rate every burst_interval seconds -
+      mimics a batch of IoT devices all reporting in at once.
+    protocols:
+      mqtt:
+        payload_size: 96
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        pattern: periodic_burst
+        burst_rate: 250
+        burst_duration: 4
+        burst_interval: 20
+      http2:
+        rate: 10
+
+  - name: mqtt_ramp
+    duration: 45
+    description: >
+      "ramping (linear increase over time)" sending pattern: publish rate
+      climbs linearly from ramp_start_rate to ramp_end_rate over
+      ramp_duration seconds, then holds - simulates a sensor fleet coming
+      online gradually.
+    protocols:
+      mqtt:
+        payload_size: 96
+        qos_distribution:
+          0: 70
+          1: 20
+          2: 10
+        pattern: ramp
+        ramp_start_rate: 5
+        ramp_end_rate: 180
+        ramp_duration: 40
+      http2:
+        rate: 10
