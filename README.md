@@ -11,9 +11,9 @@
 - [x] Traffic controller
 - [x] Configurable traffic patterns (3+ YAML profiles, ramp/burst/random)
 - [x] Dashboard for live control and monitoring
+- [x] Report (Related Work)
 - [ ] Multi-Machine-Test / (Lab)
 - [ ] Wireshark captures
-- [ ] Report
 - [ ] Live demo rehearsal
 
 ---
