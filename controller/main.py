@@ -226,9 +226,25 @@ async def _ramp_rates(configs: dict[str, dict], duration: float, direction: str,
     their target values (direction='up'), or from their target values down to 0
     (direction='down'), over `duration` seconds, via periodic PATCH /config calls.
 
-    Used to implement the global `warmup`/`cooldown` periods, and doubles as the
-    "ramping (linear increase over time)" sending pattern: the gradual rate change
-    is directly visible as a ramp in Wireshark I/O graphs.
+    This implements the global `warmup`/`cooldown` periods: every generator's
+    rate climbs from/to 0 once, at the very start/end of an entire profile run.
+
+    This is distinct from each generator's own pattern='ramp' sending pattern
+    (see e.g. generators/http2/generator.py): that one ramps a single
+    generator's rate between two arbitrary values (ramp_start_rate ->
+    ramp_end_rate) for the duration of whichever phase requests it, computed
+    entirely inside the generator from a wall-clock anchor, with no PATCH
+    polling from here required. The two mechanisms can run independently:
+    a phase using pattern='ramp' for one protocol is unaffected by this
+    function, since _phase_to_gen_configs simply forwards ramp_start_rate/
+    ramp_end_rate/ramp_duration/pattern through to that generator's config
+    like any other field, and this function only touches RATE_FIELDS
+    ("rate", "tcp_rate", "udp_rate") - not the ramp_* fields. Note, however,
+    that if warmup/cooldown ramps the generic `rate` field on a generator
+    that is *currently* in pattern='ramp' mode, that PATCH has no visible
+    effect, since the generator ignores `rate` in favor of ramp_start_rate/
+    ramp_end_rate while pattern='ramp' is active; the generator's own ramp
+    still runs to completion based on its phase duration.
 
     Non-rate fields in `configs` (payload size, mode, etc.) are left untouched here -
     callers apply those separately via the normal phase config, since only the rate
@@ -261,19 +277,53 @@ async def _ramp_rates(configs: dict[str, dict], duration: float, direction: str,
     state["ramp_status"] = None
 
 
+def _translate_http2(p: dict) -> dict:
+    """Translates YAML-friendly keys into the fields gen-http2 actually reads.
+    `method_distribution: {GET: 70, POST: 30}` -> `method_get_pct: 70` (normalized
+    so it doesn't matter if the two percentages don't sum to exactly 100). Any
+    other keys (rate, payload_size, pattern, burst_*, ramp_*, concurrent_streams,
+    fault_rate, ...) are forwarded unchanged - they already match the generator's
+    field names 1:1."""
+    cfg = {k: v for k, v in p.items() if k != "method_distribution"}
+    dist = p.get("method_distribution")
+    if isinstance(dist, dict) and dist:
+        get_pct = float(dist.get("GET", dist.get("get", 0)) or 0)
+        post_pct = float(dist.get("POST", dist.get("post", 0)) or 0)
+        total = get_pct + post_pct
+        cfg["method_get_pct"] = round((get_pct / total) * 100) if total > 0 else 100
+    return cfg
+
+
+def _translate_mqtt(p: dict) -> dict:
+    """Translates YAML-friendly keys into the fields gen-mqtt actually reads.
+    `topics: [a, b, c]` -> `topic_count: 3` - the generator only supports
+    rotating through a fixed-size topic set (named sensors/..., actuators/...,
+    status/... up to len(BASE_TOPICS), then generic load/topic-N beyond that),
+    not arbitrary topic *names*, so the YAML topic list is used purely as a
+    convenient way to say how many topics should be in rotation. Any other
+    keys (rate, payload_size, qos, qos_distribution, pattern, burst_*, ramp_*,
+    fault_rate, ...) are forwarded unchanged."""
+    cfg = {k: v for k, v in p.items() if k != "topics"}
+    topics = p.get("topics")
+    if isinstance(topics, list) and topics:
+        cfg["topic_count"] = len(topics)
+    return cfg
+
+
 def _phase_to_gen_configs(phase: dict) -> dict[str, dict]:
     """Convert a phase's 'protocols' block into per-generator configs."""
     p = phase.get("protocols", {})
     return {
-        "gen-http2":  {k: v for k, v in p.get("http2", {}).items()},
+        "gen-http2":  _translate_http2(p.get("http2", {})),
         "gen-quic":   {k: v for k, v in p.get("quic",  {}).items()},
-        "gen-mqtt":   {k: v for k, v in p.get("mqtt",  {}).items()},
+        "gen-mqtt":   _translate_mqtt(p.get("mqtt", {})),
         "gen-tcpudp": {
             "tcp_rate":    p.get("tcp", {}).get("rate", 0),
             "udp_rate":    p.get("udp", {}).get("rate", 0),
             "packet_size": p.get("tcp", {}).get("packet_size", 512),
             # Forward the rest of the tcpudp block as-is: mode, mean_interval,
-            # min_size, max_size, tcp_ratio, pattern, burst_size, burst_interval.
+            # min_size, max_size, tcp_ratio, pattern, burst_size, burst_interval,
+            # ramp_start_rate, ramp_end_rate, ramp_duration.
             **p.get("tcpudp", {}),
         },
     }
@@ -306,6 +356,14 @@ async def _adaptive_loop(adaptive_cfg: dict):
     `scale_up_threshold.latency_max_ms` / `scale_down_threshold.latency_min_ms` are
     also honoured for generators that report a `latency_ms` stat (currently
     gen-http2 and gen-tcpudp).
+
+    Note: this loop scales the generic rate field(s) in RATE_FIELDS (rate /
+    tcp_rate / udp_rate). If a generator is currently running pattern='ramp',
+    it computes its own effective rate from ramp_start_rate/ramp_end_rate
+    instead of the generic rate field, so a PATCH applied here has no visible
+    effect on that generator until its phase's pattern changes away from
+    'ramp'. This mirrors the same pre-existing interaction with the global
+    warmup/cooldown ramp (see _ramp_rates).
     """
     check_interval = adaptive_cfg.get("check_interval", 10)
     up_cfg   = adaptive_cfg.get("scale_up_threshold", {})
@@ -550,12 +608,23 @@ async def load_config(body: ConfigLoadRequest = Body(...)):
     _log(f"Loaded profile '{profile}'")
 
     if state["running"]:
+        # Cancel the existing phase runner so it doesn't overwrite
+        # the new profile's config when its sleep timer expires.
+        if state["phase_task"]:
+            state["phase_task"].cancel()
+            state["phase_task"] = None
+        _stop_adaptive()
+
         phases = profile_data.get("phases", [])
         if phases:
             configs = _phase_to_gen_configs(phases[0])
             for name, cfg in configs.items():
                 if cfg:
                     await _call("patch", f"{GENERATORS[name]}/config", json=cfg)
+
+        # Restart the phase runner with the new profile
+        loop = asyncio.get_event_loop()
+        state["phase_task"] = loop.create_task(_run_phases(profile_data))
 
     return {"ok": True, "profile": profile}
 
@@ -593,9 +662,9 @@ async def start_generator(name: str):
     if name not in GENERATORS:
         raise HTTPException(404, f"Unknown generator '{name}'. Valid: {list(GENERATORS)}")
     result = await _call("post", f"{GENERATORS[name]}/start", json={})
-    if "error" in result:
-        _log(f"Failed to start {name}: {result['error']}", "error")
-        raise HTTPException(502, detail=f"Generator {name} unreachable: {result['error']}")
+    if "error" in result:                                                 # ← add
+        _log(f"Failed to start {name}: {result['error']}", "error")      # ← add
+        raise HTTPException(502, detail=f"Generator {name} unreachable: {result['error']}")  # ← add
     _log(f"Started {name}")
     return {"ok": True, "note": str(result)}
 
