@@ -4,6 +4,19 @@
 
 ---
 
+## Progress
+
+- [x] System architecture & Docker Compose setup
+- [x] Configurable traffic patterns (3+ YAML profiles, ramp/burst/random)
+- [x] Dashboard for live control and monitoring
+- [x] Multi-machine Compose setup (generators/targets split, untested on real hardware)
+- [ ] Multi-Machine-Test / (Lab)
+- [ ] Wireshark captures
+- [ ] Report
+- [ ] Live demo rehearsal
+
+---
+
 ## What this project does
 
 This system simulates a realistic enterprise network by generating concurrent traffic across five protocols (HTTP/2, QUIC/HTTP/3, MQTT, TCP, and UDP), all from orchestrated Docker containers. A central controller reads a YAML configuration file and steers all generators in real time. A web dashboard lets you watch and control everything live.
