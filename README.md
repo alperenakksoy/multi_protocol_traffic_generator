@@ -7,9 +7,10 @@
 ## Progress
 
 - [x] System architecture & Docker Compose setup
+- [x] Protocol generators
+- [x] Traffic controller
 - [x] Configurable traffic patterns (3+ YAML profiles, ramp/burst/random)
 - [x] Dashboard for live control and monitoring
-- [x] Multi-machine Compose setup (generators/targets split, untested on real hardware)
 - [ ] Multi-Machine-Test / (Lab)
 - [ ] Wireshark captures
 - [ ] Report
