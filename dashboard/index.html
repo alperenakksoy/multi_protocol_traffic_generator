@@ -937,13 +937,14 @@
         <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
           <div class="setting-label">
             Sending pattern
-            <i class="info-icon" data-tip="Constant: fixed intervals.\nPeriodic burst: alternates between base rate and burst rate. The spike shows up clearly in the Wireshark IO graph.\nRandom (Poisson): same average rate, exponentially-distributed gaps. Mimics bursty human traffic.">i</i>
+            <i class="info-icon" data-tip="Constant: fixed intervals.\nPeriodic burst: alternates between base rate and burst rate. The spike shows up clearly in the Wireshark IO graph.\nRandom (Poisson): same average rate, exponentially-distributed gaps. Mimics bursty human traffic.\nRamp: rate climbs linearly from Ramp start to Ramp end over Ramp duration, then holds.">i</i>
           </div>
           <div class="rate-control">
             <select class="mode-select" id="pattern-gen-http2" onchange="onHttp2PatternChange(this.value)">
               <option value="constant">Constant</option>
               <option value="periodic_burst">Periodic burst</option>
               <option value="random">Random (Poisson)</option>
+              <option value="ramp">Ramp (linear)</option>
             </select>
             <span class="setting-display" id="burstactive-disp-gen-http2" style="width:auto"></span>
           </div>
@@ -979,6 +980,39 @@
             <input type="range" min="5" max="120" step="5" value="30" id="burstinterval-gen-http2"
                    oninput="onHttp2BurstFieldChange('gen-http2', 'burst_interval', this.value)">
             <span class="setting-display" id="burstinterval-disp-gen-http2">30s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp start rate
+            <i class="info-icon" data-tip="Requests/sec at the start of the ramp (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="5" value="0" id="rampstartrate-gen-http2"
+                   oninput="onRampFieldChange('gen-http2', 'ramp_start_rate', this.value)">
+            <span class="setting-display" id="rampstartrate-disp-gen-http2">0 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp end rate
+            <i class="info-icon" data-tip="Requests/sec the ramp climbs to and then holds at (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="500" step="5" value="100" id="rampendrate-gen-http2"
+                   oninput="onRampFieldChange('gen-http2', 'ramp_end_rate', this.value)">
+            <span class="setting-display" id="rampendrate-disp-gen-http2">100 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp duration
+            <i class="info-icon" data-tip="How long (seconds) the linear climb from Ramp start to Ramp end takes (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="180" step="5" value="60" id="rampduration-gen-http2"
+                   oninput="onRampFieldChange('gen-http2', 'ramp_duration', this.value)">
+            <span class="setting-display" id="rampduration-disp-gen-http2">60s</span>
           </div>
         </div>
       </div>
@@ -1025,13 +1059,81 @@
         <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
           <div class="setting-label">
             Sending pattern
-            <i class="info-icon" data-tip="Constant: fixed intervals between connection cycles.\nRandom (Poisson): same average rate, exponentially-distributed gaps.">i</i>
+            <i class="info-icon" data-tip="Constant: fixed intervals between connection cycles.\nPeriodic burst: alternates between base rate and burst rate.\nRandom (Poisson): same average rate, exponentially-distributed gaps.\nRamp: rate climbs linearly from Ramp start to Ramp end over Ramp duration, then holds.">i</i>
           </div>
           <div class="rate-control">
             <select class="mode-select" id="pattern-gen-quic" onchange="onPatternChange('gen-quic', this.value)">
               <option value="constant">Constant</option>
+              <option value="periodic_burst">Periodic burst</option>
               <option value="random">Random (Poisson)</option>
+              <option value="ramp">Ramp (linear)</option>
             </select>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst rate
+            <i class="info-icon" data-tip="Peak rate during the burst phase (only used with Periodic burst pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="20" max="500" step="10" value="100" id="burstrate-gen-quic"
+                   oninput="onHttp2BurstFieldChange('gen-quic', 'burst_rate', this.value)">
+            <span class="setting-display" id="burstrate-disp-gen-quic">100 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst duration
+            <i class="info-icon" data-tip="How long (seconds) the burst rate is held before dropping back to the base rate.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="30" step="1" value="5" id="burstduration-gen-quic"
+                   oninput="onHttp2BurstFieldChange('gen-quic', 'burst_duration', this.value)">
+            <span class="setting-display" id="burstduration-disp-gen-quic">5s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst interval
+            <i class="info-icon" data-tip="Time between the end of one burst and the start of the next (at base rate).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="120" step="5" value="30" id="burstinterval-gen-quic"
+                   oninput="onHttp2BurstFieldChange('gen-quic', 'burst_interval', this.value)">
+            <span class="setting-display" id="burstinterval-disp-gen-quic">30s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp start rate
+            <i class="info-icon" data-tip="Cycles/sec at the start of the ramp (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="200" step="5" value="0" id="rampstartrate-gen-quic"
+                   oninput="onRampFieldChange('gen-quic', 'ramp_start_rate', this.value)">
+            <span class="setting-display" id="rampstartrate-disp-gen-quic">0 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp end rate
+            <i class="info-icon" data-tip="Cycles/sec the ramp climbs to and then holds at (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="200" step="5" value="40" id="rampendrate-gen-quic"
+                   oninput="onRampFieldChange('gen-quic', 'ramp_end_rate', this.value)">
+            <span class="setting-display" id="rampendrate-disp-gen-quic">40 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp duration
+            <i class="info-icon" data-tip="How long (seconds) the linear climb from Ramp start to Ramp end takes (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="180" step="5" value="60" id="rampduration-gen-quic"
+                   oninput="onRampFieldChange('gen-quic', 'ramp_duration', this.value)">
+            <span class="setting-display" id="rampduration-disp-gen-quic">60s</span>
           </div>
         </div>
       </div>
@@ -1075,13 +1177,81 @@
         <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
           <div class="setting-label">
             Sending pattern
-            <i class="info-icon" data-tip="Constant: fixed intervals between publishes.\nRandom (Poisson): same average rate, exponentially-distributed gaps.">i</i>
+            <i class="info-icon" data-tip="Constant: fixed intervals between publishes.\nPeriodic burst: alternates between base rate and burst rate.\nRandom (Poisson): same average rate, exponentially-distributed gaps.\nRamp: rate climbs linearly from Ramp start to Ramp end over Ramp duration, then holds.">i</i>
           </div>
           <div class="rate-control">
             <select class="mode-select" id="pattern-gen-mqtt" onchange="onPatternChange('gen-mqtt', this.value)">
               <option value="constant">Constant</option>
+              <option value="periodic_burst">Periodic burst</option>
               <option value="random">Random (Poisson)</option>
+              <option value="ramp">Ramp (linear)</option>
             </select>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst rate
+            <i class="info-icon" data-tip="Peak publish rate during the burst phase (only used with Periodic burst pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="20" max="500" step="10" value="100" id="burstrate-gen-mqtt"
+                   oninput="onHttp2BurstFieldChange('gen-mqtt', 'burst_rate', this.value)">
+            <span class="setting-display" id="burstrate-disp-gen-mqtt">100 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst duration
+            <i class="info-icon" data-tip="How long (seconds) the burst rate is held before dropping back to the base rate.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="1" max="30" step="1" value="5" id="burstduration-gen-mqtt"
+                   oninput="onHttp2BurstFieldChange('gen-mqtt', 'burst_duration', this.value)">
+            <span class="setting-display" id="burstduration-disp-gen-mqtt">5s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Burst interval
+            <i class="info-icon" data-tip="Time between the end of one burst and the start of the next (at base rate).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="120" step="5" value="30" id="burstinterval-gen-mqtt"
+                   oninput="onHttp2BurstFieldChange('gen-mqtt', 'burst_interval', this.value)">
+            <span class="setting-display" id="burstinterval-disp-gen-mqtt">30s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp start rate
+            <i class="info-icon" data-tip="Messages/sec at the start of the ramp (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="300" step="5" value="0" id="rampstartrate-gen-mqtt"
+                   oninput="onRampFieldChange('gen-mqtt', 'ramp_start_rate', this.value)">
+            <span class="setting-display" id="rampstartrate-disp-gen-mqtt">0 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp end rate
+            <i class="info-icon" data-tip="Messages/sec the ramp climbs to and then holds at (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="300" step="5" value="50" id="rampendrate-gen-mqtt"
+                   oninput="onRampFieldChange('gen-mqtt', 'ramp_end_rate', this.value)">
+            <span class="setting-display" id="rampendrate-disp-gen-mqtt">50 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 180px 1fr;">
+          <div class="setting-label">
+            Ramp duration
+            <i class="info-icon" data-tip="How long (seconds) the linear climb from Ramp start to Ramp end takes (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="180" step="5" value="60" id="rampduration-gen-mqtt"
+                   oninput="onRampFieldChange('gen-mqtt', 'ramp_duration', this.value)">
+            <span class="setting-display" id="rampduration-disp-gen-mqtt">60s</span>
           </div>
         </div>
       </div>
@@ -1093,13 +1263,14 @@
         <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
           <div class="setting-label">
             Sending pattern
-            <i class="info-icon" data-tip="Constant: one packet per interval derived from the rate.\nPeriodic burst: sends Burst size packets back-to-back, then idles for Burst interval.\nRandom (Poisson): exponentially-distributed gaps between sends.\nIndependent of Normal/Stealth mode (which controls packet size).">i</i>
+            <i class="info-icon" data-tip="Constant: one packet per interval derived from the rate.\nPeriodic burst: sends Burst size packets back-to-back, then idles for Burst interval.\nRandom (Poisson): exponentially-distributed gaps between sends.\nRamp: combined TCP+UDP packet rate climbs linearly from Ramp start to Ramp end over Ramp duration, then holds.\nIndependent of Normal/Stealth mode (which controls packet size).">i</i>
           </div>
           <div class="rate-control">
             <select class="mode-select" id="pattern-gen-tcpudp" onchange="onPatternChange('gen-tcpudp', this.value)">
               <option value="constant">Constant</option>
               <option value="periodic_burst">Periodic burst</option>
               <option value="random">Random (Poisson)</option>
+              <option value="ramp">Ramp (linear)</option>
             </select>
           </div>
         </div>
@@ -1123,6 +1294,39 @@
             <input type="range" min="0" max="2000" step="50" value="1000" id="burstinterval-gen-tcpudp"
                    oninput="onBurstIntervalChange('gen-tcpudp', this.value)">
             <span class="setting-display" id="burstinterval-disp-gen-tcpudp">1000ms</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp start rate
+            <i class="info-icon" data-tip="Combined TCP+UDP packets/sec at the start of the ramp, split by TCP ratio (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="300" step="5" value="0" id="rampstartrate-gen-tcpudp"
+                   oninput="onRampFieldChange('gen-tcpudp', 'ramp_start_rate', this.value)">
+            <span class="setting-display" id="rampstartrate-disp-gen-tcpudp">0 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp end rate
+            <i class="info-icon" data-tip="Combined TCP+UDP packets/sec the ramp climbs to and then holds at (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="300" step="5" value="50" id="rampendrate-gen-tcpudp"
+                   oninput="onRampFieldChange('gen-tcpudp', 'ramp_end_rate', this.value)">
+            <span class="setting-display" id="rampendrate-disp-gen-tcpudp">50 req/s</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
+            Ramp duration
+            <i class="info-icon" data-tip="How long (seconds) the linear climb from Ramp start to Ramp end takes (only used with Ramp pattern).">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="5" max="180" step="5" value="60" id="rampduration-gen-tcpudp"
+                   oninput="onRampFieldChange('gen-tcpudp', 'ramp_duration', this.value)">
+            <span class="setting-display" id="rampduration-disp-gen-tcpudp">60s</span>
           </div>
         </div>
       </div>
@@ -1324,13 +1528,17 @@
 
   const PHASE_DESCRIPTIONS = {
     http2_dominant:        'HTTP/2 GET/POST dominates, MQTT and TCP are minimal; protocol hierarchy baseline.',
-    http2_burst:           'HTTP/2 rate increases in periodic bursts; visible in the I/O graph (temporal analysis).',
+    http2_ramp:            'HTTP/2 and QUIC rate climbs linearly ("ramp" pattern) from a low start rate to a high end rate, then holds; visible as a rising slope in the I/O graph (temporal analysis), distinct from a periodic burst.',
+    http2_burst:           'HTTP/2 and QUIC rate increases in periodic bursts; visible in the I/O graph (temporal analysis).',
     cooldown_phase:        'All rates reduced; cooldown phase before the end of the capture.',
     mqtt_qos0_heavy:       'QoS 0 (fire and forget); one packet per message, fast and unreliable.',
     mqtt_qos2_comparison:  'QoS 2 (exactly once); 4-way handshake, 4x more packets per message.',
     mqtt_mixed:            'Mixed QoS levels, as in a real IoT system.',
+    mqtt_burst:            'MQTT publish rate increases in periodic bursts ("periodic_burst" pattern); mimics a batch of IoT devices reporting in at once.',
+    mqtt_ramp:             'MQTT publish rate climbs linearly ("ramp" pattern) from a low start rate to a high end rate, then holds; simulates a sensor fleet coming online gradually.',
     balanced_constant:     'Even distribution at a constant rate; ideal for protocol hierarchy analysis.',
     balanced_with_stealth: 'Stealth mode + Random (Poisson) sending pattern on all generators; for behavioral fingerprinting and temporal analysis.',
+    balanced_ramp:         'Linear ramp ("ramp" pattern) on every protocol: rate climbs from a low start rate to a high end rate, then holds; for temporal analysis, independent of the global warmup/cooldown ramp.',
     balanced_adaptive:     'Adaptive Control active; the system automatically adjusts rates based on the error rate.',
     warmup:                'Global warmup period: all configured rates are linearly ramped from 0 up to the first phase\'s target values.',
     cooldown:              'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops.',
@@ -1522,7 +1730,7 @@
     }
 
     // Pattern tag
-    const pLabel = { constant: 'constant', periodic_burst: 'periodic burst', random: 'Poisson' }[pattern] || pattern;
+    const pLabel = { constant: 'constant', periodic_burst: 'periodic burst', random: 'Poisson', ramp: 'ramp' }[pattern] || pattern;
     const pStealth = stealth && pattern === 'random';
     if (pStealth) {
       tags.push(t('stealth Poisson', '#1f2328','#1f2328','#fff'));
@@ -1544,6 +1752,11 @@
     'gen-http2': (g) => {
       const streams = g.concurrent_streams ?? '?';
       const size    = g.payload_size ?? '?';
+      if (g.pattern === 'ramp') {
+        return `DATA frames in clusters of ${streams}, same ${size} B payload, but the cluster rate ` +
+          `climbs linearly from ${g.ramp_start_rate ?? '?'} to ${g.ramp_end_rate ?? '?'} req/s over ` +
+          `${g.ramp_duration ?? '?'}s. The IO graph shows a rising slope, then a flat plateau.`;
+      }
       return `DATA frames arrive in clusters of ${streams}. Same ${size} B payload per cluster. ` +
         `The HEADERS+DATA pattern repeats at a fixed rate. Looks like a flat sawtooth in the IO graph.`;
     },
@@ -1551,6 +1764,11 @@
       const size    = g.payload_size ?? '?';
       const streams = g.stream_count ?? '?';
       const rtt     = (g.use_0rtt && g.zero_rtt_used) ? '0-RTT (no handshake visible)' : '1-RTT handshake on each connect';
+      if (g.pattern === 'ramp') {
+        return `Short-header packets after the initial handshake (${rtt}), fixed ${size} B payload, but the ` +
+          `cycle rate climbs linearly from ${g.ramp_start_rate ?? '?'} to ${g.ramp_end_rate ?? '?'}/s over ` +
+          `${g.ramp_duration ?? '?'}s. The IO graph shows a rising slope, then a flat plateau.`;
+      }
       return `Short-header packets after the initial handshake (${rtt}). ` +
         `Fixed ${size} B payload, ${streams} stream${streams !== 1 ? 's' : ''}. ` +
         `No TCP retransmits. QUIC handles recovery itself.`;
@@ -1562,12 +1780,23 @@
         ? `mixed QoS 0/1/2 (weights ${dist.join('/')})`
         : `QoS ${g.qos ?? '?'}`;
       const fanout  = `The generator also subscribes, so the broker echoes every PUBLISH back. That gives two packet streams for one sender.`;
+      if (g.pattern === 'ramp') {
+        return `${qosNote} across ${g.topic_count ?? '?'} topics, but the publish rate climbs linearly from ` +
+          `${g.ramp_start_rate ?? '?'} to ${g.ramp_end_rate ?? '?'} msg/s over ${g.ramp_duration ?? '?'}s. ` +
+          `The IO graph shows a rising slope, then a flat plateau. ${fanout}`;
+      }
       if ((g.qos ?? 0) >= 2 || (hasWt && dist[2] > 0)) {
         return `${qosNote} across ${g.topic_count ?? '?'} topics. Each message triggers a 4-way ACK handshake (PUBLISH, PUBREC, PUBREL, PUBCOMP). Topic strings appear in plaintext. ${fanout}`;
       }
       return `${qosNote} across ${g.topic_count ?? '?'} topics. PUBLISH frames followed by PUBACK for QoS 1, or fire-and-forget for QoS 0. Topic strings appear in plaintext. ${fanout}`;
     },
     'gen-tcpudp': (g) => {
+      if (g.pattern === 'ramp') {
+        return `Combined TCP+UDP rate climbs linearly from ${g.ramp_start_rate ?? '?'} to ` +
+          `${g.ramp_end_rate ?? '?'} pkt/s over ${g.ramp_duration ?? '?'}s, then holds. ` +
+          `The IO graph shows a rising slope, then a flat plateau - size/timing fingerprint ` +
+          `(${g.mode === 'stealth' ? 'variable' : 'fixed'} size) is unaffected by the ramp.`;
+      }
       if (g.mode === 'stealth' && g.pattern === 'random') {
         return `Variable size (${g.min_size ?? '?'} to ${g.max_size ?? '?'} B), Poisson-distributed timing. ` +
           `The IO graph looks like background noise. Hard to distinguish without deep inspection.`;
@@ -1712,6 +1941,7 @@
       const chk = document.getElementById('toggle-' + name);
       const locked = (_toggleLock[name] || 0) > Date.now();
       if (!locked && document.activeElement !== chk) chk.checked = isOn;
+
       if (g.rate !== undefined) {
         const slider = document.getElementById('range-' + name);
         const disp   = document.getElementById('rate-' + name);
@@ -1784,6 +2014,26 @@
       const el = document.getElementById('postpaths-gen-http2');
       if (document.activeElement !== el) el.value = h2.post_paths.join(', ');
     }
+    // Generic sync for ramp_start_rate / ramp_end_rate / ramp_duration, shared
+    // by all four generators (id pattern: ramp{start,end}rate-gen-X, rampduration-gen-X).
+    function syncRampFields(name, g) {
+      if (g.ramp_start_rate !== undefined) {
+        const el = document.getElementById('rampstartrate-gen-' + name);
+        const disp = document.getElementById('rampstartrate-disp-gen-' + name);
+        if (el && document.activeElement !== el) { el.value = g.ramp_start_rate; if (disp) disp.textContent = `${fmtNum(g.ramp_start_rate)} req/s`; }
+      }
+      if (g.ramp_end_rate !== undefined) {
+        const el = document.getElementById('rampendrate-gen-' + name);
+        const disp = document.getElementById('rampendrate-disp-gen-' + name);
+        if (el && document.activeElement !== el) { el.value = g.ramp_end_rate; if (disp) disp.textContent = `${fmtNum(g.ramp_end_rate)} req/s`; }
+      }
+      if (g.ramp_duration !== undefined) {
+        const el = document.getElementById('rampduration-gen-' + name);
+        const disp = document.getElementById('rampduration-disp-gen-' + name);
+        if (el && document.activeElement !== el) { el.value = g.ramp_duration; if (disp) disp.textContent = `${g.ramp_duration}s`; }
+      }
+    }
+
     if (h2.pattern !== undefined) {
       const el = document.getElementById('pattern-gen-http2');
       if (document.activeElement !== el) el.value = h2.pattern;
@@ -1810,6 +2060,7 @@
         disp.style.color = 'var(--orange, #d97706)';
       }
     }
+    syncRampFields('http2', h2);
 
     // QUIC settings sync
     const quic = gens['gen-quic'] || {};
@@ -1836,6 +2087,22 @@
       const el = document.getElementById('pattern-gen-quic');
       if (document.activeElement !== el) el.value = quic.pattern;
     }
+    if (quic.burst_rate !== undefined) {
+      const el = document.getElementById('burstrate-gen-quic');
+      const disp = document.getElementById('burstrate-disp-gen-quic');
+      if (document.activeElement !== el) { el.value = quic.burst_rate; disp.textContent = `${fmtNum(quic.burst_rate)} req/s`; }
+    }
+    if (quic.burst_duration !== undefined) {
+      const el = document.getElementById('burstduration-gen-quic');
+      const disp = document.getElementById('burstduration-disp-gen-quic');
+      if (document.activeElement !== el) { el.value = quic.burst_duration; disp.textContent = `${quic.burst_duration}s`; }
+    }
+    if (quic.burst_interval !== undefined) {
+      const el = document.getElementById('burstinterval-gen-quic');
+      const disp = document.getElementById('burstinterval-disp-gen-quic');
+      if (document.activeElement !== el) { el.value = quic.burst_interval; disp.textContent = `${quic.burst_interval}s`; }
+    }
+    syncRampFields('quic', quic);
 
     // MQTT settings sync
     const mqttG = gens['gen-mqtt'] || {};
@@ -1859,6 +2126,22 @@
       const el = document.getElementById('pattern-gen-mqtt');
       if (document.activeElement !== el) el.value = mqttG.pattern;
     }
+    if (mqttG.burst_rate !== undefined) {
+      const el = document.getElementById('burstrate-gen-mqtt');
+      const disp = document.getElementById('burstrate-disp-gen-mqtt');
+      if (document.activeElement !== el) { el.value = mqttG.burst_rate; disp.textContent = `${fmtNum(mqttG.burst_rate)} req/s`; }
+    }
+    if (mqttG.burst_duration !== undefined) {
+      const el = document.getElementById('burstduration-gen-mqtt');
+      const disp = document.getElementById('burstduration-disp-gen-mqtt');
+      if (document.activeElement !== el) { el.value = mqttG.burst_duration; disp.textContent = `${mqttG.burst_duration}s`; }
+    }
+    if (mqttG.burst_interval !== undefined) {
+      const el = document.getElementById('burstinterval-gen-mqtt');
+      const disp = document.getElementById('burstinterval-disp-gen-mqtt');
+      if (document.activeElement !== el) { el.value = mqttG.burst_interval; disp.textContent = `${mqttG.burst_interval}s`; }
+    }
+    syncRampFields('mqtt', mqttG);
 
     // TCP/UDP settings sync
     const tcpudpG = gens['gen-tcpudp'] || {};
@@ -1877,6 +2160,7 @@
       const ms = Math.round(tcpudpG.burst_interval * 1000);
       if (document.activeElement !== el) { el.value = ms; disp.textContent = ms + 'ms'; }
     }
+    syncRampFields('tcpudp', tcpudpG);
 
     renderPerf(data);
 
@@ -2296,6 +2580,23 @@
     }, 400);
   }
 
+  function onRampFieldChange(name, field, value) {
+    // field is one of: ramp_start_rate, ramp_end_rate, ramp_duration.
+    // ramp_duration is a plain seconds value; the two rate fields are
+    // displayed as "<n> req/s" for consistency with the burst-rate display,
+    // even though for gen-mqtt it's messages/sec and for gen-tcpudp it's a
+    // combined TCP+UDP packets/sec figure.
+    const n = field === 'ramp_duration' ? parseFloat(value) : parseInt(value);
+    const dispId = field.replace(/_/g, '') + '-disp-' + name;
+    const disp = document.getElementById(dispId);
+    if (disp) disp.textContent = field === 'ramp_duration' ? `${n}s` : `${n} req/s`;
+    clearTimeout(faultTimers[name + '-' + field]);
+    faultTimers[name + '-' + field] = setTimeout(() => {
+      patchGen(name, {[field]: n});
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: ${field} → ${n}`, 'info');
+    }, 400);
+  }
+
   function onTopicCountChange(name, value) {
     const n = parseInt(value);
     document.getElementById('topics-disp-' + name).textContent = n;
@@ -2402,7 +2703,7 @@
     addLog(now(), `TCP/UDP mode → ${mode}`, mode === 'stealth' ? 'success' : 'info');
   }
 
-async function toggleGen(name, checked) {
+  async function toggleGen(name, checked) {
   _toggleLock[name] = Date.now() + 6000;
   try {
     const endpoint = checked ? '/start' : '/stop';
