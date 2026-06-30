@@ -1,0 +1,227 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: DEMO SHOWCASE                                            ║
+# ║  Designed for live professor presentation — ~7 minutes total               ║
+# ║                                                                            ║
+# ║  Each phase has ONE clear idea visible in the Wireshark I/O graph.         ║
+# ║  Say the phase name out loud as you switch — it tells the story.           ║
+# ║                                                                            ║
+# ║  Timeline:                                                                 ║
+# ║    00:00  Warmup   (15 s)  — rates ramp up from 0                         ║
+# ║    00:15  Phase 1  (60 s)  — even multi-protocol baseline                 ║
+# ║    01:15  Phase 2  (60 s)  — HTTP/2 multiplexing burst                    ║
+# ║    02:15  Phase 3  (60 s)  — MQTT QoS ladder (0 → 1 → 2)                 ║
+# ║    03:15  Phase 4  (75 s)  — Fault injection + resilience                 ║
+# ║    04:30  Phase 5  (75 s)  — Adaptive Control reacts live                 ║
+# ║    05:45  Cooldown (15 s)  — rates ramp down                              ║
+# ║    06:00  END                                                              ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  duration: 360          # 6 min active traffic
+  warmup:   15           # short warmup — demo shouldn't wait long
+  cooldown: 15
+
+phases:
+
+  # ── Phase 1: Multi-Protocol Baseline ─────────────────────────────────────────
+  # What to say: "Here you can see all four protocols side by side at equal load.
+  #               In Wireshark the bars are roughly the same height — balanced."
+  # What to show: Overview tab → all 4 generator cards active
+  - name: multi_protocol_baseline
+    duration: 60
+    description: >
+      All four protocols running at moderate, equal rates.
+      Establishes a clear baseline in the Wireshark I/O graph before we
+      introduce individual effects. Ideal for the Overview tab.
+    protocols:
+      http2:
+        rate: 40
+        payload_size: 2048
+        method_distribution:
+          GET: 70
+          POST: 30
+        concurrent_streams: 3
+        pattern: constant
+      quic:
+        rate: 30
+        payload_size: 1024
+        pattern: constant
+      mqtt:
+        rate: 25
+        payload_size: 256
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        topics:
+          - sensors/temperature
+          - sensors/humidity
+          - status/heartbeat
+      tcp:
+        rate: 15
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256
+
+  # ── Phase 2: HTTP/2 Burst (Multiplexing in Action) ───────────────────────────
+  # What to say: "Watch the Wireshark graph — every 20 seconds HTTP/2 spikes to
+  #               8x its base rate. This is HTTP/2 stream multiplexing under load:
+  #               many requests over a single TLS connection."
+  # What to show: Analysis tab → HTTP/2 sparkline; Wireshark port 8443 filter
+  - name: http2_multiplexing_burst
+    duration: 60
+    description: >
+      HTTP/2 runs at a low base rate with a periodic_burst every 20 seconds.
+      The burst (×8 the base rate) is clearly visible as a spike in the
+      Wireshark I/O graph. Demonstrates HTTP/2 stream multiplexing capacity.
+    protocols:
+      http2:
+        rate: 20
+        payload_size: 4096
+        concurrent_streams: 12
+        pattern: periodic_burst
+        burst_rate: 160
+        burst_duration: 5
+        burst_interval: 20
+      quic:
+        rate: 15
+        payload_size: 512
+        pattern: constant
+      mqtt:
+        rate: 15
+        payload_size: 128
+        qos_distribution:
+          0: 80
+          1: 20
+          2: 0
+      tcp:
+        rate: 5
+        mode: normal
+      udp:
+        rate: 5
+
+  # ── Phase 3: MQTT QoS Ladder ─────────────────────────────────────────────────
+  # What to say: "QoS 0 = fire and forget, one packet per message.
+  #               QoS 2 = exactly once delivery, FOUR packets per message.
+  #               At the same publish rate (40 msg/s), QoS 2 generates 4× the
+  #               traffic. Watch the Wireshark packet count jump."
+  # What to show: Generator > MQTT tab; Wireshark filter: mqtt
+  - name: mqtt_qos_ladder
+    duration: 60
+    description: >
+      Mixed QoS distribution ramps from QoS-0-heavy to QoS-2-heavy mid-phase.
+      At 40 msg/s, QoS 0 = 40 packets/s; QoS 2 = 160 packets/s (4-way
+      handshake). A vivid illustration of protocol overhead in the I/O graph.
+    protocols:
+      mqtt:
+        rate: 40
+        payload_size: 96
+        qos_distribution:
+          0: 20          # mostly QoS 2 for max packet-count effect
+          1: 30
+          2: 50
+        topics:
+          - sensors/temperature
+          - sensors/humidity
+          - sensors/pressure
+          - control/critical
+          - alarms/fire
+      http2:
+        rate: 10
+        payload_size: 512
+        pattern: constant
+      quic:
+        rate: 10
+      tcp:
+        rate: 5
+        mode: normal
+
+  # ── Phase 4: Fault Injection — Resilience Test ───────────────────────────────
+  # What to say: "We inject 20% artificial failures into HTTP/2 and QUIC.
+  #               The system keeps running — the error-rate cards go red.
+  #               This simulates packet loss or a flaky upstream service."
+  # What to show: Fault Injection tab → fault sliders; Overview error column
+  # NOTE: You can also drag the fault sliders manually in the dashboard for
+  #       a live demo effect. This phase sets a moderate baseline.
+  - name: fault_injection_resilience
+    duration: 75
+    description: >
+      HTTP/2 and QUIC receive 20% injected fault rate (publish failures,
+      connection drops). Error rates rise in the dashboard. Demonstrates the
+      system's resilience: traffic continues at reduced effective throughput
+      and the log shows ERR entries in real time.
+    protocols:
+      http2:
+        rate: 50
+        payload_size: 2048
+        fault_rate: 0.20         # 20% of requests fail
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 1024
+        fault_rate: 0.20         # 20% of requests fail
+        pattern: constant
+      mqtt:
+        rate: 30
+        payload_size: 256
+        qos_distribution:
+          0: 50
+          1: 30
+          2: 20
+        fault_rate: 0.05         # mild 5% on MQTT too
+      tcp:
+        rate: 15
+        mode: normal
+      udp:
+        rate: 10
+
+  # ── Phase 5: Adaptive Control ─────────────────────────────────────────────────
+  # What to say: "Adaptive Control is now active. The controller checks error
+  #               rates and latency every 5 seconds. If both are low it scales
+  #               UP by ×1.2; if errors exceed 5% it scales DOWN by ×0.5.
+  #               Watch the multiplier column in the Adaptive tab move live."
+  # What to show: Adaptive Control tab → multiplier column reacts
+  # TIP: While this phase runs, go to Fault Injection and push HTTP/2 fault_rate
+  #      to 30% — the controller will scale HTTP/2 down within 5–10 seconds.
+  - name: adaptive_control_live
+    duration: 75
+    description: >
+      Adaptive Control enabled. The controller polls every 5 seconds and
+      scales rates ×1.2 up (error_rate=0%, latency<60ms) or ×0.5 down
+      (error_rate≥5% or latency>180ms). Multipliers are visible in the
+      Adaptive tab and in the System Log as AUTO entries.
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0    # perfect run → scale up
+        latency_max_ms: 60
+      scale_down_threshold:
+        error_rate_min: 0.05   # ≥5% errors → scale down
+        latency_min_ms: 180
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 5.0
+    protocols:
+      http2:
+        rate: 40
+        payload_size: 2048
+        pattern: constant
+      quic:
+        rate: 30
+        payload_size: 1024
+        pattern: constant
+      mqtt:
+        rate: 25
+        qos_distribution:
+          0: 50
+          1: 30
+          2: 20
+      tcp:
+        rate: 12
+        mode: normal
+      udp:
+        rate: 8

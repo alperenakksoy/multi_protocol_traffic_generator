@@ -1,0 +1,168 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: MICROSERVICES API GATEWAY                                ║
+# ║  Simulates a Kubernetes-based microservices backend under normal and        ║
+# ║  stress conditions.                                                         ║
+# ║                                                                            ║
+# ║  Real-world use case: REST API gateway fronting a set of microservices     ║
+# ║  (auth, product catalog, checkout, notifications, telemetry).              ║
+# ║                                                                            ║
+# ║  Key insights:                                                             ║
+# ║    • GET-heavy reads vs. POST-heavy writes have very different profiles    ║
+# ║    • Mixed protocol stack: REST/HTTP2 + MQTT for push notifications        ║
+# ║    • Fault injection shows how a single slow service cascades              ║
+# ║    • Adaptive control mimics a circuit-breaker kicking in                  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  warmup:   15
+  cooldown: 10
+
+phases:
+
+  # ── Phase 1: Read-Heavy API Traffic ───────────────────────────────────────
+  - name: read_heavy
+    duration: 60
+    description: >
+      70% GET / 30% POST, moderate rate — typical daytime API gateway load.
+      Simultaneous streams = connection pool. MQTT carries push notifications
+      (order status, alerts) at low QoS. TCP carries raw DB proxy traffic.
+    protocols:
+      http2:
+        rate: 80
+        payload_size: 2048
+        method_distribution:
+          GET: 70
+          POST: 30
+        concurrent_streams: 10
+        pattern: constant
+      mqtt:
+        rate: 20
+        payload_size: 128
+        qos_distribution:
+          0: 70
+          1: 20
+          2: 10
+        topics:
+          - notifications/order_status
+          - notifications/alerts
+          - telemetry/api_metrics
+      tcp:
+        rate: 10
+        packet_size: 512
+        mode: normal
+
+  # ── Phase 2: Write Spike (Checkout / Event Burst) ──────────────────────────
+  - name: write_spike
+    duration: 60
+    description: >
+      Black Friday flash-sale scenario: sudden burst of POST requests
+      (cart updates, payment calls). Rate spikes 4× every 30 s.
+      HTTP/2 multiplexing absorbs the burst without opening new TCP connections.
+    protocols:
+      http2:
+        rate: 30
+        payload_size: 4096
+        method_distribution:
+          GET: 20
+          POST: 80              # mostly writes during sale burst
+        concurrent_streams: 16
+        pattern: periodic_burst
+        burst_rate: 250
+        burst_duration: 6
+        burst_interval: 30
+      mqtt:
+        rate: 50
+        payload_size: 256
+        qos_distribution:
+          0: 40
+          1: 40
+          2: 20
+        topics:
+          - orders/new
+          - payments/confirm
+          - inventory/reserve
+          - notifications/shipping
+      tcp:
+        rate: 15
+        packet_size: 768
+        mode: normal
+
+  # ── Phase 3: Cascading Service Failure ────────────────────────────────────
+  - name: cascading_failure
+    duration: 60
+    description: >
+      A slow downstream service (checkout) is simulated by injecting 30%
+      faults and +200ms extra latency into HTTP/2. The notification pipeline
+      (MQTT QoS 2) stays reliable. Shows how a single slow microservice
+      degrades the entire gateway — error rate rises, latency spikes.
+    protocols:
+      http2:
+        rate: 80
+        payload_size: 2048
+        method_distribution:
+          GET: 50
+          POST: 50
+        concurrent_streams: 10
+        fault_rate: 0.30         # checkout service failing
+        extra_latency_ms: 200    # slow DB behind failing service
+        pattern: constant
+      mqtt:
+        rate: 20
+        payload_size: 128
+        qos_distribution:
+          0: 50
+          1: 30
+          2: 20
+        fault_rate: 0.02         # minor MQTT hiccup
+        topics:
+          - notifications/order_status
+          - alarms/service_down
+      tcp:
+        rate: 8
+        packet_size: 512
+        mode: normal
+
+  # ── Phase 4: Circuit Breaker (Adaptive Control) ────────────────────────────
+  - name: circuit_breaker
+    duration: 75
+    description: >
+      Adaptive Control acts as a software circuit breaker: if error_rate ≥ 5%,
+      it halves the request rate instantly (scale_down_factor 0.5). When the
+      service recovers (errors = 0, latency < 70ms), it ramps back ×1.2.
+      Demonstrates Adaptive Control as an automated resilience mechanism.
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 70
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 200
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.05
+      max_multiplier: 4.0
+    protocols:
+      http2:
+        rate: 80
+        payload_size: 2048
+        method_distribution:
+          GET: 60
+          POST: 40
+        concurrent_streams: 10
+        pattern: constant
+      mqtt:
+        rate: 20
+        payload_size: 128
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        topics:
+          - notifications/order_status
+          - telemetry/api_metrics
+      tcp:
+        rate: 8
+        packet_size: 512
+        mode: normal

@@ -1,0 +1,131 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: VIDEO STREAMING CDN                                      ║
+# ║  Simulates an adaptive-bitrate video streaming workload (HLS/DASH over     ║
+# ║  HTTP/2 and QUIC/HTTP3).                                                   ║
+# ║                                                                            ║
+# ║  Real-world use case: CDN edge server under viewer load — segment          ║
+# ║  requests, manifest fetches, quality ladder switches.                      ║
+# ║                                                                            ║
+# ║  Key insights:                                                             ║
+# ║    • HTTP/2 multiplexing lets many viewers share one connection            ║
+# ║    • QUIC eliminates head-of-line blocking — better on lossy links         ║
+# ║    • Large payloads (1–4 MB segments) dominate bandwidth                  ║
+# ║    • Adaptive control mimics CDN auto-scaling under viewer spike           ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  warmup:   15
+  cooldown: 10
+
+phases:
+
+  # ── Phase 1: Normal Viewing Load ──────────────────────────────────────────
+  - name: normal_viewing
+    duration: 60
+    description: >
+      Steady 720p segment delivery over HTTP/2. 8 concurrent streams simulate
+      8 simultaneous viewers per connection. Payload 512KB = one ~4s segment.
+      QUIC carries a share of viewers (as an HTTP/3 fallback path).
+    protocols:
+      http2:
+        rate: 30
+        payload_size: 32768    # ~32 KB per request (manifest + small segment)
+        concurrent_streams: 8
+        method_distribution:
+          GET: 95
+          POST: 5              # player analytics/reporting
+        pattern: constant
+      quic:
+        rate: 15
+        payload_size: 16384    # QUIC/HTTP3 segment fetch
+        pattern: constant
+      tcp:
+        rate: 3                # legacy HLS fallback
+        packet_size: 1400
+        mode: normal
+
+  # ── Phase 2: Evening Peak (Viewer Spike) ──────────────────────────────────
+  - name: evening_peak
+    duration: 60
+    description: >
+      Viewer count spikes at 20:00. Rate doubles, stream concurrency increases
+      to 16, payload grows (1080p). Shows HTTP/2 multiplexing advantage:
+      2× viewers need far less than 2× connections.
+    protocols:
+      http2:
+        rate: 70
+        payload_size: 65536    # 64 KB (1080p segment chunks)
+        concurrent_streams: 16
+        method_distribution:
+          GET: 97
+          POST: 3
+        pattern: constant
+      quic:
+        rate: 35
+        payload_size: 32768
+        pattern: constant
+      tcp:
+        rate: 5
+        packet_size: 1400
+        mode: normal
+
+  # ── Phase 3: Network Degradation (Fault Injection) ────────────────────────
+  - name: lossy_network
+    duration: 60
+    description: >
+      20% fault on QUIC, 10% on HTTP/2. QUIC degrades less gracefully
+      (no HOL blocking) while HTTP/2 stalls streams. Error-rate cards
+      turn red. Mirrors CDN performance on a flaky last-mile link.
+    protocols:
+      http2:
+        rate: 50
+        payload_size: 32768
+        concurrent_streams: 12
+        fault_rate: 0.10       # 10% segment fetch failures
+        extra_latency_ms: 80   # added RTT for lossy path
+        pattern: constant
+      quic:
+        rate: 30
+        payload_size: 16384
+        fault_rate: 0.20       # QUIC tolerates packet loss better, but still hurts
+        extra_latency_ms: 80
+        pattern: constant
+      tcp:
+        rate: 3
+        packet_size: 1400
+        mode: normal
+
+  # ── Phase 4: CDN Auto-Scale (Adaptive Control) ────────────────────────────
+  - name: cdn_autoscale
+    duration: 75
+    description: >
+      Adaptive Control mimics CDN auto-scaling: scales request rate up when
+      the origin is healthy, scales down if latency exceeds 150 ms (origin
+      overload signal). Multiplier visible in the Adaptive tab in real time.
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 60
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 150
+      scale_up_factor: 1.3
+      scale_down_factor: 0.6
+      min_multiplier: 0.2
+      max_multiplier: 6.0
+    protocols:
+      http2:
+        rate: 50
+        payload_size: 32768
+        concurrent_streams: 12
+        pattern: constant
+      quic:
+        rate: 25
+        payload_size: 16384
+        pattern: constant
+      tcp:
+        rate: 4
+        packet_size: 1400
+        mode: normal

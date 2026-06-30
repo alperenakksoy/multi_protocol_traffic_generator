@@ -563,6 +563,54 @@
       cursor: pointer;
     }
 
+    /* ── Log Tabs ────────────────────────────────────────────────────── */
+    .log-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: -1px;   /* merge with box border below */
+      flex-wrap: wrap;
+    }
+    .log-tab {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .log-tab:hover { background: var(--bg); color: var(--text); }
+    .log-tab.active { background: var(--bg); color: var(--text); border-bottom: 1px solid var(--bg); }
+
+    /* active tab color matches source */
+    .log-tab[data-source="controller"].active    { color: #7c3aed; }
+    .log-tab[data-source="gen-http2"].active     { color: #0369a1; }
+    .log-tab[data-source="gen-quic"].active      { color: #0e7490; }
+    .log-tab[data-source="gen-mqtt"].active      { color: #15803d; }
+    .log-tab[data-source="gen-tcpudp"].active    { color: #b45309; }
+    .log-tab[data-source="target-http2"].active  { color: #0369a1; }
+    .log-tab[data-source="target-quic"].active   { color: #0e7490; }
+    .log-tab[data-source="target-tcpudp"].active { color: #b45309; }
+    .log-tab[data-source="mosquitto"].active     { color: #15803d; }
+
+    /* subtle dimming to visually group target tabs */
+    .log-tab[data-source^="target"], .log-tab[data-source="mosquitto"] {
+      opacity: 0.8;
+    }
+    .log-tab[data-source^="target"].active, .log-tab[data-source="mosquitto"].active {
+      opacity: 1;
+    }
+    .log-tab-sep {
+      display: flex; align-items: flex-end;
+      padding: 0 4px 6px;
+      font-size: 10px; color: var(--text-light);
+      user-select: none;
+    }
+
     /* ── Log ─────────────────────────────────────────────────────────── */
     .log-box {
       border: 1px solid var(--border);
@@ -576,13 +624,66 @@
       scroll-behavior: smooth;
     }
 
-    .log-inner { padding: 10px 14px; }
-    .log-line { display: flex; gap: 12px; }
-    .log-time { color: var(--text-light); flex-shrink: 0; }
-    .log-msg  { color: var(--text-muted); }
-    .log-line.success .log-msg { color: var(--green); }
-    .log-line.error   .log-msg { color: var(--red); }
-    .log-line.adaptive .log-msg { color: var(--accent); }
+    .log-inner { padding: 8px 14px; }
+    .log-line  { display: flex; gap: 0; align-items: baseline; padding: 2px 0; font-size: 12px; }
+    .log-time  { color: var(--text-light); flex-shrink: 0; margin-right: 6px; }
+
+    /* docker-compose-style source prefix */
+    .log-source {
+      flex-shrink: 0;
+      width: 10ch;
+      font-weight: 700;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: clip;
+      white-space: nowrap;
+    }
+    .log-pipe { color: var(--border); margin: 0 8px; flex-shrink: 0; }
+
+    /* Per-source colors — match docker-compose palette */
+    .log-source-controller { color: #7c3aed; }
+    .log-source-http2      { color: #0369a1; }
+    .log-source-quic       { color: #0e7490; }
+    .log-source-mqtt       { color: #15803d; }
+    .log-source-tcpudp     { color: #b45309; }
+
+    .log-badge {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.04em;
+      line-height: 1.6;
+      margin-right: 6px;
+    }
+    .log-msg { color: var(--text-muted); }
+
+    /* success — green */
+    .log-line.success .log-badge { background: #dcfce7; color: #166534; }
+    .log-line.success .log-msg   { color: var(--text); }
+
+    /* error — red */
+    .log-line.error .log-badge { background: #fee2e2; color: #991b1b; }
+    .log-line.error .log-msg   { color: var(--red); }
+
+    /* adaptive — blue */
+    .log-line.adaptive .log-badge { background: #dbeafe; color: #1d4ed8; }
+    .log-line.adaptive .log-msg   { color: var(--accent); }
+
+    /* info — yellow/amber */
+    .log-line.info .log-badge { background: #fef9c3; color: #713f12; }
+
+    /* raw Docker log lines — monospace, full width, no badge */
+    .log-line.raw {
+      display: block;
+      font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-all;
+      padding: 1px 0;
+    }
 
     /* ── Footer ─────────────────────────────────────────────────────── */
     .footer-meta {
@@ -721,13 +822,36 @@
       <div class="section-label">Traffic Profile</div>
       <div class="profile-row">
         <span class="profile-label">Preset:</span>
-        <button class="btn btn-sm" id="prof-http2_heavy" onclick="loadProfile('http2_heavy')"
-                title="3 phases: http2_dominant → http2_burst → cooldown">HTTP/2 Dominant</button>
-        <button class="btn btn-sm" id="prof-mqtt_heavy"  onclick="loadProfile('mqtt_heavy')"
-                title="3 phases: mqtt_qos0_heavy → mqtt_qos2_comparison → mqtt_mixed">MQTT Dominant</button>
         <button class="btn btn-sm" id="prof-balanced"    onclick="loadProfile('balanced')"
                 title="3 phases: balanced_constant → balanced_with_stealth → balanced_adaptive">Balanced</button>
+        <button class="btn btn-sm" id="prof-http2_heavy" onclick="loadProfile('http2_heavy')"
+                title="3 phases: http2_dominant → http2_burst → cooldown">HTTP/2 Heavy</button>
+        <button class="btn btn-sm" id="prof-mqtt_heavy"  onclick="loadProfile('mqtt_heavy')"
+                title="3 phases: mqtt_qos0_heavy → mqtt_qos2_comparison → mqtt_mixed">MQTT Heavy</button>
+        <button class="btn btn-sm" id="prof-quic_heavy"  onclick="loadProfile('quic_heavy')"
+                title="4 phases: quic_baseline → quic_high_throughput → quic_burst → quic_adaptive">QUIC Heavy</button>
+        <button class="btn btn-sm" id="prof-tcpudp_heavy" onclick="loadProfile('tcpudp_heavy')"
+                title="4 phases: tcp_dominant → udp_dominant → tcp_burst → mixed_transport">TCP/UDP Heavy</button>
+        <button class="btn btn-sm" id="prof-burst_mode" onclick="loadProfile('burst_mode')"
+                title="3 phases: all_burst_slow → all_burst_fast → staggered_burst">Burst Mode</button>
+        <button class="btn btn-sm" id="prof-fault_injection" onclick="loadProfile('fault_injection')"
+                title="4 phases: fault_low (5%) → fault_medium (25%) → fault_heavy (50%) → fault_recovery">Fault Injection</button>
+        <button class="btn btn-sm" id="prof-adaptive_only" onclick="loadProfile('adaptive_only')"
+                title="3 phases: adaptive_baseline → adaptive_under_pressure → adaptive_recovery">Adaptive Only</button>
         <span id="active-phase" style="font-size:12px;color:var(--text-muted);margin-left:8px"></span>
+      </div>
+      <div class="profile-row" style="margin-top:4px">
+        <span class="profile-label">Scenarios:</span>
+        <button class="btn btn-sm" id="prof-iot_sensor_farm"   onclick="loadProfile('iot_sensor_farm')"
+                title="4 phases: Heartbeat → Shift Burst → QoS 2 Alarms → Adaptive Fleet">IoT Farm</button>
+        <button class="btn btn-sm" id="prof-video_streaming"   onclick="loadProfile('video_streaming')"
+                title="4 phases: Normal Viewing → Evening Peak → Lossy Network → CDN Autoscale">Video CDN</button>
+        <button class="btn btn-sm" id="prof-microservices_api" onclick="loadProfile('microservices_api')"
+                title="4 phases: Read-Heavy → Write Spike → Cascading Failure → Circuit Breaker">Microservices</button>
+        <button class="btn btn-sm" id="prof-network_stress_test" onclick="loadProfile('network_stress_test')"
+                title="4 phases: Ramp Up → Sustained Max → Overload → Auto-Recovery">Stress Test</button>
+        <button class="btn btn-sm" id="prof-smart_city"        onclick="loadProfile('smart_city')"
+                title="4 phases: Day Ops → Rush Hour → Emergency Event → Night Adaptive">Smart City</button>
       </div>
       <div id="phase-desc" style="font-size:12px;color:var(--text-light);margin-top:6px"></div>
     </section>
@@ -852,14 +976,23 @@
 
     <!-- System Log -->
     <section>
-      <div class="section-row">
-        <div class="section-label" style="margin-bottom:0">System Log</div>
-        <button class="btn btn-sm" onclick="clearLog()" style="font-weight:400">Clear</button>
+      <div class="section-label">System Log</div>
+      <div class="log-tabs" id="log-tabs">
+        <button class="log-tab active" data-source="all"           onclick="setLogTab('all')">All</button>
+        <button class="log-tab" data-source="controller"           onclick="setLogTab('controller')">controller</button>
+        <span class="log-tab-sep">gen: </span>
+        <button class="log-tab" data-source="gen-http2"            onclick="setLogTab('gen-http2')">gen-http2</button>
+        <button class="log-tab" data-source="gen-quic"             onclick="setLogTab('gen-quic')">gen-quic</button>
+        <button class="log-tab" data-source="gen-mqtt"             onclick="setLogTab('gen-mqtt')">gen-mqtt</button>
+        <button class="log-tab" data-source="gen-tcpudp"           onclick="setLogTab('gen-tcpudp')">gen-tcpudp</button>
+        <span class="log-tab-sep">target: </span>
+        <button class="log-tab" data-source="target-http2"         onclick="setLogTab('target-http2')">target-http2</button>
+        <button class="log-tab" data-source="target-quic"          onclick="setLogTab('target-quic')">target-quic</button>
+        <button class="log-tab" data-source="target-tcpudp"        onclick="setLogTab('target-tcpudp')">target-tcpudp</button>
+        <button class="log-tab" data-source="mosquitto"            onclick="setLogTab('mosquitto')">mosquitto</button>
       </div>
       <div class="log-box" id="log-box">
-        <div class="log-inner" id="log-inner">
-          <div class="log-line"><span class="log-time">-</span><span class="log-msg">Waiting for connection to the controller...</span></div>
-        </div>
+        <div class="log-inner" id="log-inner"></div>
       </div>
     </section>
 
@@ -1426,8 +1559,8 @@
     <section>
       <div class="section-row">
         <div style="display:flex;align-items:center;gap:4px">
-          <span class="section-label" style="margin-bottom:0">Failure Signals (Live, Real Packet Capture)</span>
-          <i class="info-icon" data-tip="Real wire-level failure signals from the same packet capture as the Analysis tab - TCP RST, MQTT DISCONNECT, and a 'went silent' fallback for protocols with no explicit close indicator (QUIC's 1-RTT CONNECTION_CLOSE is encrypted, so silence is the honest signal there). Different from Fault Injection above, which simulates errors at the application level with no real wire effect.">i</i>
+          <span class="section-label" style="margin-bottom:0">Failure Signals &amp; Injection Events</span>
+          <i class="info-icon" data-tip="Two types of entries: (1) Wire-level signals from real packet capture — TCP RST, MQTT DISCONNECT, silence detection. (2) Fault injection events — when you move the error-rate or latency sliders, an entry appears here explaining the expected wire effect (which Wireshark frames to look for, how RTT or packet gaps change).">i</i>
         </div>
       </div>
       <div class="log-box" id="failure-box">
@@ -1539,9 +1672,74 @@
     balanced_constant:     'Even distribution at a constant rate; ideal for protocol hierarchy analysis.',
     balanced_with_stealth: 'Stealth mode + Random (Poisson) sending pattern on all generators; for behavioral fingerprinting and temporal analysis.',
     balanced_ramp:         'Linear ramp ("ramp" pattern) on every protocol: rate climbs from a low start rate to a high end rate, then holds; for temporal analysis, independent of the global warmup/cooldown ramp.',
-    balanced_adaptive:     'Adaptive Control active; the system automatically adjusts rates based on the error rate.',
-    warmup:                'Global warmup period: all configured rates are linearly ramped from 0 up to the first phase\'s target values.',
-    cooldown:              'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops.',
+    balanced_adaptive:          'Adaptive Control active; the system automatically adjusts rates based on the error rate.',
+    // Demo Showcase phases
+    multi_protocol_baseline:    '[Demo 1/5] All four protocols at equal load — establishes the baseline in the I/O graph.',
+    http2_multiplexing_burst:   '[Demo 2/5] HTTP/2 fires a x8 burst every 20 s. Visible spike in Wireshark — shows stream multiplexing under load.',
+    mqtt_qos_ladder:            '[Demo 3/5] MQTT at 40 msg/s, mostly QoS 2. Each message = 4 packets (handshake). Packet count jumps in Wireshark.',
+    fault_injection_resilience: '[Demo 4/5] 20% injected faults on HTTP/2 and QUIC. Error rate rises, system keeps running.',
+    adaptive_control_live:      '[Demo 5/5] Adaptive Control active. Controller adjusts rates every 5 s based on error rate and latency.',
+
+    // IoT Sensor Farm
+    steady_heartbeat:    '[IoT Farm 1/4] 100 msg/s QoS 0 — fire-and-forget sensor readings, one packet per message.',
+    shift_startup_burst: '[IoT Farm 2/4] Burst every 15 s simulates a whole row of devices powering on at shift start.',
+    alarm_qos2:          '[IoT Farm 3/4] 30 msg/s but 100% QoS 2 = 120 packets/s (4-way handshake). Compare to Phase 1.',
+    adaptive_fleet:      '[IoT Farm 4/4] Adaptive Control throttles the fleet when broker latency exceeds threshold.',
+
+    // Video Streaming CDN
+    normal_viewing:  '[Video CDN 1/4] Steady 720p delivery over HTTP/2 (8 concurrent streams) and QUIC.',
+    evening_peak:    '[Video CDN 2/4] Viewer spike: rate doubles, concurrency up to 16. HTTP/2 absorbs it without new TCP connections.',
+    lossy_network:   '[Video CDN 3/4] 20% fault on QUIC, 10% on HTTP/2, +80ms latency — simulates a flaky last-mile link.',
+    cdn_autoscale:   '[Video CDN 4/4] Adaptive Control scales down when latency > 150 ms, scales up again when stable.',
+
+    // Microservices API
+    read_heavy:        '[Microservices 1/4] 70% GET / 30% POST at moderate rate — typical API gateway daytime load.',
+    write_spike:       '[Microservices 2/4] 4x POST burst every 30 s — simulates a checkout surge. HTTP/2 multiplexing handles it.',
+    cascading_failure: '[Microservices 3/4] 30% fault + 200 ms extra latency on HTTP/2 — one slow service brings error rate up.',
+    circuit_breaker:   '[Microservices 4/4] Adaptive Control acts as circuit breaker: trips at 5% errors, resets gradually.',
+
+    // Stress Test
+    ramp_up:       '[Stress Test 1/4] All protocols ramp linearly from 10 to max over 50 s — visible slope in Wireshark.',
+    sustained_max: '[Stress Test 2/4] Sustained peak load for 60 s. A healthy system should stay below 1% error rate.',
+    overload:      '[Stress Test 3/4] Intentional 2-3x overload with 15% injected faults — observe how the system degrades.',
+    auto_recovery: '[Stress Test 4/4] Adaptive Control recovers: backs off hard at 10% errors, ramps up slowly once stable.',
+
+    // Smart City
+    day_normal_ops:  '[Smart City 1/4] Daytime steady state: traffic sensors (MQTT), citizen portal (HTTP/2), video feeds (QUIC).',
+    rush_hour:       '[Smart City 2/4] Rush hour: MQTT bursts on traffic light changes, HTTP/2 portal load doubles.',
+    emergency_event: '[Smart City 3/4] Emergency scenario: QoS 2 for critical commands, HTTP/2 degrades under overload.',
+    night_adaptive:  '[Smart City 4/4] Night mode: Adaptive Control handles meter-reading batch and scales TCP accordingly.',
+
+    // QUIC Heavy
+    quic_baseline:        '[QUIC 1/4] QUIC at moderate rate alongside minimal HTTP/2 — establishes the UDP-based baseline.',
+    quic_high_throughput: '[QUIC 2/4] QUIC at 200 req/s with 8 KB payloads. No TCP handshake overhead — compare latency to HTTP/2.',
+    quic_burst:           '[QUIC 3/4] QUIC bursts to 400 req/s every 20 s. Sharp UDP spikes in Wireshark, no SYN/ACK before each burst.',
+    quic_adaptive:        '[QUIC 4/4] Adaptive Control on QUIC: scales up when latency < 40 ms, backs off on errors.',
+
+    // TCP/UDP Heavy
+    tcp_dominant:    '[TCP/UDP 1/4] High TCP rate — SYN/ACK and ACK overhead visible in Wireshark packet list.',
+    udp_dominant:    '[TCP/UDP 2/4] Same data rate as Phase 1 but UDP only. Significantly fewer packets — no handshake overhead.',
+    tcp_burst:       '[TCP/UDP 3/4] TCP with periodic burst every 15 s. Simulates a batch upload job alongside normal traffic.',
+    mixed_transport: '[TCP/UDP 4/4] TCP and UDP both at high load — maximum raw packet rate across all transport protocols.',
+
+    // Burst Mode
+    all_burst_slow:  '[Burst 1/3] All protocols burst every 30 s. Spikes are clearly separated — easy to identify each protocol in Wireshark.',
+    all_burst_fast:  '[Burst 2/3] All protocols burst every 10 s. Overlapping bursts create compound spikes and potential link saturation.',
+    staggered_burst: '[Burst 3/3] Each protocol has a different burst interval. Irregular, non-repeating pattern — closest to real-world traffic.',
+
+    // Fault Injection
+    fault_low:      '[Fault 1/4] 5% fault rate on all protocols. Errors appear in the dashboard but traffic continues normally.',
+    fault_medium:   '[Fault 2/4] 25% faults + 150 ms extra latency on HTTP/2. One in four requests fails — clearly visible in error cards.',
+    fault_heavy:    '[Fault 3/4] 50% faults. Half of all requests fail. MQTT QoS 2 retries keep some messages through.',
+    fault_recovery: '[Fault 4/4] Faults cleared, Adaptive Control active. Watch rates ramp back up as error rate drops to 0.',
+
+    // Adaptive Only
+    adaptive_baseline:       '[Adaptive 1/3] Balanced load from the start, Adaptive Control immediately active. Rates climb automatically every 5 s.',
+    adaptive_under_pressure: '[Adaptive 2/3] Faults injected — Adaptive Control must react and scale down. Watch multiplier drop in the Adaptive tab.',
+    adaptive_recovery:       '[Adaptive 3/3] Faults cleared. Adaptive Control ramps rates back up. Full recovery curve visible in sparklines.',
+
+    warmup:                     'Global warmup period: all configured rates are linearly ramped from 0 up to the first phase\'s target values.',
+    cooldown:                   'Global cooldown period: all rates are linearly ramped back down to 0 before the system stops.',
   };
 
   // Canvas colors for perf charts (CSS vars cannot be used in Canvas 2D API)
@@ -1605,9 +1803,10 @@
   // ── Live sparkline state ──────────────────────────────────────────────────
 
   const GEN_NAMES    = ['gen-http2','gen-quic','gen-mqtt','gen-tcpudp'];
-  const SP_POINTS    = 45;   // 45 × 2s poll = 90s rolling window
-  const SP_HISTORY   = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
-  const SP_PREV_PKTS = {};
+  const SP_POINTS      = 45;   // 45 × 2s poll = 90s rolling window
+  const SP_HISTORY     = Object.fromEntries(GEN_NAMES.map(n => [n, []]));
+  const SP_PREV_PKTS   = {};
+  const SP_WAS_RUNNING = {};  // previous running state per generator
 
   // Client-side perf history (rate_bps + latency_ms per poll, max 150 points = ~5 min)
   const PERF_MAX     = 150;
@@ -1637,7 +1836,24 @@
 
   function pushSparklineData(gens) {
     GEN_NAMES.forEach(name => {
-      const g       = gens[name] || {};
+      const g          = gens[name] || {};
+      const isRunning  = !!g.running;
+      const wasRunning = SP_WAS_RUNNING[name];
+      SP_WAS_RUNNING[name] = isRunning;
+
+      if (!isRunning) {
+        // Push one explicit 0 when the generator just stopped so the line
+        // visibly drops to zero, then stop updating — the last real value
+        // stays as the rightmost point in subsequent polls.
+        if (wasRunning === true) {
+          SP_HISTORY[name].push(0);
+          if (SP_HISTORY[name].length > SP_POINTS) SP_HISTORY[name].shift();
+        }
+        // Keep prev_pkts in sync so the first delta after restart is correct.
+        SP_PREV_PKTS[name] = g.packets_sent || 0;
+        return;
+      }
+
       const current = g.packets_sent || 0;
       // On first poll or after a reset, initialise without a fake spike.
       const prev    = SP_PREV_PKTS[name] ?? current;
@@ -1853,20 +2069,121 @@
 
   // ── Log ───────────────────────────────────────────────────────────────────
 
-  function addLog(time, msg, level = 'info') {
+  const LOG_BADGE = { success: 'OK', error: 'ERR', adaptive: 'AUTO', info: 'INFO' };
+
+  // Source → display label (12-char max for alignment)
+  // ── System Log ───────────────────────────────────────────────────────────
+  // "All" tab: high-level controller events (profile loads, phase changes, etc.)
+  // Per-container tabs: raw Docker logs fetched from GET /logs/{container}
+  //   gen-mqtt tab → mosquitto container (shows PUBLISH/PUBREC/PUBCOMP)
+
+  const DOCKER_CONTAINER = {
+    'controller':    'controller',
+    'gen-http2':     'gen-http2',
+    'gen-quic':      'gen-quic',
+    'gen-mqtt':      'gen-mqtt',
+    'gen-tcpudp':    'gen-tcpudp',
+    'target-http2':  'target-http2',
+    'target-quic':   'target-quic',
+    'target-tcpudp': 'target-tcpudp',
+    'mosquitto':     'mosquitto',
+  };
+
+  const allLogEntries = [];
+  let activeLogTab = 'all';
+  // track scroll position so we only auto-scroll when the user is at the bottom
+  let rawLogPinned = true;
+
+  function setLogTab(source) {
+    activeLogTab = source;
+    document.querySelectorAll('.log-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.source === source);
+    });
+    if (source === 'all') {
+      rebuildLogView();
+    } else {
+      fetchRawLogs(source);
+    }
+  }
+
+  function rebuildLogView() {
     const inner = document.getElementById('log-inner');
-    const line  = document.createElement('div');
-    line.className = 'log-line ' + level;
-    line.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
-    inner.appendChild(line);
-    while (inner.children.length > 100) inner.removeChild(inner.firstChild);
+    inner.innerHTML = '';
+    allLogEntries.forEach(e => renderLogLine(inner, e));
     const box = document.getElementById('log-box');
     box.scrollTop = box.scrollHeight;
   }
 
-  function clearLog() {
-    document.getElementById('log-inner').innerHTML = '';
-    seenLogCount = 0;
+  function renderLogLine(inner, e) {
+    const line = document.createElement('div');
+    line.className = 'log-line ' + (e.level || 'info');
+
+    const badge    = LOG_BADGE[e.level] || 'INFO';
+    const srcKey   = (e.source || 'controller').replace('gen-', '');
+    const src      = e.source || 'controller';
+
+    line.innerHTML =
+      `<span class="log-source log-source-${srcKey}">${src}</span>` +
+      `<span class="log-pipe">|</span>` +
+      `<span class="log-time">${e.time}</span>` +
+      `<span class="log-badge">${badge}</span>` +
+      `<span class="log-msg">${e.msg || e.message || ''}</span>`;
+    inner.appendChild(line);
+  }
+
+  // Containers that live on Machine B — their logs are not reachable via
+  // docker logs from Machine A in multi-machine mode.
+  const REMOTE_CONTAINERS = new Set(['target-http2','target-quic','target-tcpudp','mosquitto']);
+
+  async function fetchRawLogs(tabSource) {
+    const container = DOCKER_CONTAINER[tabSource];
+    if (!container) return;
+    try {
+      const res = await fetch(`${API}/logs/${container}?lines=300`, {signal: AbortSignal.timeout(5000)});
+      if (activeLogTab !== tabSource) return;
+      const inner = document.getElementById('log-inner');
+      const box   = document.getElementById('log-box');
+
+      if (!res.ok) {
+        // 503 / 500 → controller could not run docker logs (multi-machine mode)
+        inner.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'log-line raw';
+        div.style.color = 'var(--text-light)';
+        const isRemote = REMOTE_CONTAINERS.has(container);
+        div.textContent = isRemote
+          ? `[multi-machine mode] "${container}" runs on Machine B — docker logs are not accessible from this machine. ` +
+            `Connect Wireshark to Machine B's physical interface, or SSH into Machine B and run: docker logs ${container}`
+          : `[error ${res.status}] Could not retrieve logs for "${container}".`;
+        inner.appendChild(div);
+        return;
+      }
+
+      const data = await res.json();
+      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      inner.innerHTML = '';
+      (data.lines || []).forEach(line => {
+        const div = document.createElement('div');
+        div.className = 'log-line raw';
+        div.textContent = line;
+        inner.appendChild(div);
+      });
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    } catch (_) {}
+  }
+
+  function addLog(time, msg, level = 'info', source = 'controller') {
+    const entry = { time, msg, level, source };
+    allLogEntries.push(entry);
+    if (allLogEntries.length > 500) allLogEntries.splice(0, allLogEntries.length - 500);
+
+    if (activeLogTab === 'all') {
+      const inner = document.getElementById('log-inner');
+      renderLogLine(inner, entry);
+      while (inner.children.length > 300) inner.removeChild(inner.firstChild);
+      const box = document.getElementById('log-box');
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
   // ── Status update ─────────────────────────────────────────────────────────
@@ -1887,15 +2204,15 @@
     const running = data.running;
     setSystemStatus(running, running ? 'Running' : 'Stopped');
 
-    // active phase
+    // active phase — show warmup/cooldown progress only, not the phase name
     const phaseEl = document.getElementById('active-phase');
     const ramp = data.ramp_status;
     if (ramp && (data.active_phase === 'warmup' || data.active_phase === 'cooldown')) {
       const pct   = Math.round(ramp.progress * 100);
       const label = ramp.phase === 'warmup' ? 'Warmup' : 'Cooldown';
-      phaseEl.textContent = `Phase: ${label} (${ramp.phase === 'warmup' ? 'up' : 'down'}, ${pct}%)`;
+      phaseEl.textContent = `${label} ${pct}%`;
     } else {
-      phaseEl.textContent = data.active_phase ? `Phase: ${data.active_phase}` : '';
+      phaseEl.textContent = '';
     }
 
     const descEl = document.getElementById('phase-desc');
@@ -2176,8 +2493,11 @@
 
     const log = data.log || [];
     const newEntries = log.slice(seenLogCount);
-    newEntries.forEach(e => addLog(e.time, e.message, e.level || 'info'));
+    newEntries.forEach(e => addLog(e.time, e.msg || e.message || '', e.level || 'info', e.source || 'controller'));
     seenLogCount = log.length;
+
+    // Refresh raw Docker logs for whichever per-container tab is active
+    if (activeLogTab !== 'all') fetchRawLogs(activeLogTab);
   }
 
   function drawSparkline(canvas, values, color) {
@@ -2377,16 +2697,73 @@
 
       const line = document.createElement('div');
       line.className = 'log-line ' + level;
-      line.innerHTML = `<span class="log-time">${fmtTime(e.ts)}</span><span class="log-msg">${label}: ${text}</span>`;
+      line.innerHTML = `<span class="log-time">${fmtTime(e.ts)}</span><span class="log-badge">${BADGE_FOR[level]||'INFO'}</span><span class="log-msg">${label}: ${text}</span>`;
       inner.appendChild(line);
     });
 
     if (appended) {
       inner.dataset.empty = 'false';
-      while (inner.children.length > 100) inner.removeChild(inner.firstChild);
+      while (inner.children.length > 200) inner.removeChild(inner.firstChild);
       const box = document.getElementById('failure-box');
       if (box) box.scrollTop = box.scrollHeight;
     }
+  }
+
+  // Protocol → badge map reused for fault-injection entries
+  const BADGE_FOR = { error: 'ERR', success: 'OK', info: 'INFO', adaptive: 'ADJ' };
+
+  // Wire-level effect hints shown when fault injection changes
+  const FAULT_WIRE_HINT = {
+    'gen-http2':  pct => pct > 0
+      ? `expect HTTP 500 responses + RST on ${pct}% of connections (visible in Wireshark)`
+      : 'HTTP/2 errors cleared — RSTs should stop appearing',
+    'gen-quic':   pct => pct > 0
+      ? `QUIC streams will abort on ${pct}% of requests — RESET_STREAM frames in capture`
+      : 'QUIC fault cleared — stream resets should stop',
+    'gen-mqtt':   pct => pct > 0
+      ? `${pct}% of MQTT publishes will raise app error → watch for DISCONNECT + reconnect bursts`
+      : 'MQTT fault cleared — broker disconnect bursts should stop',
+    'gen-tcpudp': pct => pct > 0
+      ? `${pct}% of TCP connections will RST immediately — RST flag visible per packet in Wireshark`
+      : 'TCP/UDP fault cleared — RSTs should stop',
+  };
+
+  const LATENCY_WIRE_HINT = {
+    'gen-http2':  ms => ms > 0
+      ? `+${ms}ms added per HTTP/2 request — RTT in Wireshark stream graph will rise by ~${ms}ms`
+      : 'HTTP/2 extra latency removed — RTT should return to baseline',
+    'gen-quic':   ms => ms > 0
+      ? `+${ms}ms added per QUIC stream — watch RTT climb in QUIC statistics`
+      : 'QUIC extra latency removed',
+    'gen-mqtt':   ms => ms > 0
+      ? `+${ms}ms added per MQTT publish — PUBACK inter-packet gap widens by ~${ms}ms`
+      : 'MQTT extra latency removed — PUBACK gaps should normalise',
+    'gen-tcpudp': ms => ms > 0
+      ? `+${ms}ms added per TCP packet — ACK delay increases by ~${ms}ms in Wireshark IO graph`
+      : 'TCP/UDP extra latency removed',
+  };
+
+  /**
+   * Append a user-triggered injection event to the Failure Signals feed.
+   * level: 'error' | 'success' | 'info' | 'adaptive'
+   * badge: short label shown in the badge column
+   * prefix: protocol label shown before the message
+   */
+  function addFailureEvent(level, badge, prefix, msg) {
+    const inner = document.getElementById('failure-inner');
+    if (!inner) return;
+    if (inner.dataset.empty === 'true') inner.innerHTML = '';
+    inner.dataset.empty = 'false';
+    const line = document.createElement('div');
+    line.className = 'log-line ' + level;
+    line.innerHTML =
+      `<span class="log-time">${now()}</span>` +
+      `<span class="log-badge">${badge}</span>` +
+      `<span class="log-msg"><strong>${prefix}:</strong> ${msg}</span>`;
+    inner.appendChild(line);
+    while (inner.children.length > 200) inner.removeChild(inner.firstChild);
+    const box = document.getElementById('failure-box');
+    if (box) box.scrollTop = box.scrollHeight;
   }
 
   function renderPerf(data) {
@@ -2430,13 +2807,27 @@
 
     if (hasRows) {
       rowsEl.innerHTML = Object.entries(status).map(([name, s]) => {
-        const lbl    = PROTOCOL_LABELS[name] || name;
-        const errPct = (s.error_rate !== undefined) ? (s.error_rate * 100).toFixed(1) + '%' : '-';
-        const mult   = (s.multiplier !== undefined) ? 'x' + Number(s.multiplier).toFixed(2) : '-';
-        const applied = s.applied ? JSON.stringify(s.applied) : '-';
-        const action  = ACTION_LABELS[s.action] || s.action || '-';
+        const lbl     = PROTOCOL_LABELS[name] || name;
+        const errPct  = (s.error_rate !== undefined) ? (s.error_rate * 100).toFixed(1) + '%' : '-';
+        const mult    = (s.multiplier !== undefined) ? 'x' + Number(s.multiplier).toFixed(2) : '-';
+        const applied = s.applied
+          ? Object.entries(s.applied).map(([k, v]) => `${k}: ${v}`).join(', ')
+          : '-';
+        const rawAction = s.action || 'hold';
+        const action  = ACTION_LABELS[rawAction] || rawAction;
+
+        // Visual cue when the multiplier is pinned at its cap or floor
+        let capBadge = '';
+        if (s.multiplier >= 4.99) capBadge = ' <span style="font-size:10px;color:var(--orange)">at max</span>';
+        else if (s.multiplier <= 0.11) capBadge = ' <span style="font-size:10px;color:var(--orange)">at min</span>';
+
+        const actionColor = rawAction === 'up' ? 'var(--green)' : rawAction === 'down' ? 'var(--red)' : 'var(--text-muted)';
         return `<div class="gen-row" style="grid-template-columns: 110px 100px 90px 1fr 90px;">
-          <div>${lbl}</div><div>${errPct}</div><div>${mult}</div><div>${applied}</div><div>${action}</div>
+          <div>${lbl}</div>
+          <div>${errPct}</div>
+          <div>${mult}${capBadge}</div>
+          <div style="font-size:12px;font-family:var(--mono)">${applied}</div>
+          <div style="color:${actionColor}">${action}</div>
         </div>`;
       }).join('');
     }
@@ -2496,7 +2887,15 @@
     clearTimeout(faultTimers[name + '-fault']);
     faultTimers[name + '-fault'] = setTimeout(() => {
       patchGen(name, {fault_rate: pct / 100});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: error rate set to ${pct}%`, pct > 0 ? 'error' : 'info');
+      const label = PROTOCOL_LABELS[name] || name;
+      addLog(now(), `${label}: error rate set to ${pct}%`, pct > 0 ? 'error' : 'info');
+      const hintFn = FAULT_WIRE_HINT[name];
+      if (hintFn) addFailureEvent(
+        pct > 0 ? 'error' : 'success',
+        pct > 0 ? 'FAULT' : 'CLR',
+        label,
+        `fault rate → ${pct}% — ${hintFn(pct)}`
+      );
     }, 400);
   }
 
@@ -2508,7 +2907,15 @@
     clearTimeout(faultTimers[name + '-lat']);
     faultTimers[name + '-lat'] = setTimeout(() => {
       patchGen(name, {extra_latency_ms: ms});
-      addLog(now(), `${PROTOCOL_LABELS[name] || name}: extra latency set to ${ms}ms`, ms > 0 ? 'adaptive' : 'info');
+      const label = PROTOCOL_LABELS[name] || name;
+      addLog(now(), `${label}: extra latency set to ${ms}ms`, ms > 0 ? 'adaptive' : 'info');
+      const hintFn = LATENCY_WIRE_HINT[name];
+      if (hintFn) addFailureEvent(
+        ms > 0 ? 'adaptive' : 'success',
+        ms > 0 ? 'LAT' : 'CLR',
+        label,
+        `extra latency → ${ms}ms — ${hintFn(ms)}`
+      );
     }, 400);
   }
 
@@ -2666,7 +3073,7 @@
     const profile = getActiveProfile() || 'balanced';
     try {
       await fetch(`${API}/start?profile=${profile}`, {method: 'POST'});
-      addLog(now(), `System started with profile "${profile}"`, 'success');
+      // Server logs "Started with profile '...'" — picked up on next poll.
       poll();
     } catch(e) { showError('Start failed'); }
   }
@@ -2674,7 +3081,7 @@
   async function stopSystem() {
     try {
       await fetch(`${API}/stop`, {method: 'POST'});
-      addLog(now(), 'System stopped');
+      // Server logs the stop event — picked up on next poll.
       poll();
     } catch(e) { showError('Stop failed'); }
   }

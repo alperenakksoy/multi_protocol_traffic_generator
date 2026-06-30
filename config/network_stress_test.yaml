@@ -1,0 +1,196 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: NETWORK STRESS TEST                                      ║
+# ║  Maximum-load test across all four protocols simultaneously.                ║
+# ║                                                                            ║
+# ║  Real-world use case: capacity planning, SLA verification, load testing    ║
+# ║  before production rollout ("how much can the stack actually handle?").    ║
+# ║                                                                            ║
+# ║  Key insights:                                                             ║
+# ║    • Phase 1: ramp up linearly — find the "knee of the curve"             ║
+# ║    • Phase 2: sustained maximum — measure steady-state throughput          ║
+# ║    • Phase 3: overload — intentional saturation, watch error rate climb   ║
+# ║    • Phase 4: recovery — adaptive control brings traffic back to stable    ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  warmup:   10
+  cooldown: 10
+
+phases:
+
+  # ── Phase 1: Linear Ramp-Up ───────────────────────────────────────────────
+  - name: ramp_up
+    duration: 60
+    description: >
+      HTTP/2 and QUIC ramp from 10 → 200 req/s over 50 seconds.
+      MQTT ramps 10 → 300 msg/s. In the Wireshark I/O graph: a clear rising
+      slope. The "knee" — where latency starts rising disproportionately —
+      is often visible here. Good starting point for capacity planning.
+    protocols:
+      http2:
+        payload_size: 2048
+        concurrent_streams: 8
+        pattern: ramp
+        ramp_start_rate: 10
+        ramp_end_rate: 200
+        ramp_duration: 50
+      quic:
+        payload_size: 1024
+        pattern: ramp
+        ramp_start_rate: 10
+        ramp_end_rate: 150
+        ramp_duration: 50
+      mqtt:
+        payload_size: 64
+        qos_distribution:
+          0: 80
+          1: 20
+          2: 0
+        pattern: ramp
+        ramp_start_rate: 10
+        ramp_end_rate: 300
+        ramp_duration: 50
+        topics:
+          - load/test/stream1
+          - load/test/stream2
+          - load/test/stream3
+      tcp:
+        rate: 20
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 30
+        packet_size: 1400
+
+  # ── Phase 2: Sustained Maximum Load ───────────────────────────────────────
+  - name: sustained_max
+    duration: 60
+    description: >
+      All protocols at their target maximum rates — sustained for 60 seconds.
+      This is the steady-state capacity test. Monitor the dashboard for
+      latency creep and error rate. A healthy system holds error_rate < 1%.
+    protocols:
+      http2:
+        rate: 200
+        payload_size: 4096
+        concurrent_streams: 16
+        method_distribution:
+          GET: 60
+          POST: 40
+        pattern: constant
+      quic:
+        rate: 150
+        payload_size: 2048
+        pattern: constant
+      mqtt:
+        rate: 300
+        payload_size: 64
+        qos_distribution:
+          0: 70
+          1: 25
+          2: 5
+        topics:
+          - load/test/stream1
+          - load/test/stream2
+          - load/test/stream3
+        pattern: constant
+      tcp:
+        rate: 30
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 50
+        packet_size: 1400
+
+  # ── Phase 3: Intentional Overload (Beyond Capacity) ───────────────────────
+  - name: overload
+    duration: 60
+    description: >
+      Rates 2–3× above sustainable levels with injected faults — simulates
+      a DDoS / flash crowd event. Error rates will rise sharply. The goal is
+      to observe how the system degrades: does it fail gracefully or hard?
+      In Wireshark: massive packet counts, rising retransmit counts.
+    protocols:
+      http2:
+        rate: 400
+        payload_size: 8192
+        concurrent_streams: 24
+        fault_rate: 0.15       # 15% requests fail under overload
+        extra_latency_ms: 150  # simulate backend queue buildup
+        pattern: constant
+      quic:
+        rate: 300
+        payload_size: 4096
+        fault_rate: 0.15
+        pattern: constant
+      mqtt:
+        rate: 450              # hard-capped at 500 by the rate limiter
+        payload_size: 128
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        fault_rate: 0.10
+        topics:
+          - load/test/stream1
+          - load/test/stream2
+          - load/test/overflow
+        pattern: constant
+      tcp:
+        rate: 50
+        packet_size: 1400
+        mode: normal
+      udp:
+        rate: 80
+        packet_size: 1400
+
+  # ── Phase 4: Auto-Recovery via Adaptive Control ───────────────────────────
+  - name: auto_recovery
+    duration: 75
+    description: >
+      Adaptive Control recovers from the overload: it aggressively scales down
+      (×0.3) when error_rate ≥ 10%, then slowly ramps back up (×1.15) as
+      the system stabilises. Demonstrates graceful degradation and recovery —
+      a key selling point for production traffic management.
+    adaptive_control:
+      enabled: true
+      check_interval: 4
+      scale_up_threshold:
+        error_rate_max: 0.01   # very tight: only scale up if almost perfect
+        latency_max_ms: 50
+      scale_down_threshold:
+        error_rate_min: 0.10   # back off hard at 10% errors
+        latency_min_ms: 150
+      scale_up_factor: 1.15
+      scale_down_factor: 0.3
+      min_multiplier: 0.05
+      max_multiplier: 3.0
+    protocols:
+      http2:
+        rate: 250
+        payload_size: 4096
+        concurrent_streams: 12
+        pattern: constant
+      quic:
+        rate: 180
+        payload_size: 2048
+        pattern: constant
+      mqtt:
+        rate: 350
+        payload_size: 64
+        qos_distribution:
+          0: 70
+          1: 25
+          2: 5
+        topics:
+          - load/test/stream1
+          - load/test/stream2
+          - load/test/stream3
+        pattern: constant
+      tcp:
+        rate: 30
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 50
+        packet_size: 1400

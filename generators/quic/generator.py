@@ -106,7 +106,15 @@ _default_unraisablehook = sys.unraisablehook
 
 def _quiet_aioquic_unraisablehook(unraisable):
     msg = str(unraisable.exc_value) if unraisable.exc_value else ""
-    if "peer-initiated unidirectional stream" in msg:
+    # Both of these are harmless aioquic teardown artefacts:
+    # 1. Peer-initiated unidirectional streams (QPACK encoder/decoder) whose
+    #    StreamWriter.__del__ tries to close an already-closed transport.
+    # 2. "cannot call write() after FIN" — same root cause: Python GC calls
+    #    StreamWriter.__del__ → close() → write_eof() on a stream that already
+    #    received end_stream=True during normal HTTP/3 connection teardown.
+    #    Both are cosmetic and do not affect traffic or metrics.
+    if ("peer-initiated unidirectional stream" in msg
+            or "cannot call write() after FIN" in msg):
         return
     _default_unraisablehook(unraisable)
 

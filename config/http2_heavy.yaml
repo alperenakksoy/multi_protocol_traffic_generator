@@ -58,6 +58,19 @@ phases:
 
   - name: http2_burst
     duration: 120
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0    # 0% errors → increase rate +20%
+        latency_max_ms: 80     # HTTP/2 heavy: allow up to 80ms before scaling up
+      scale_down_threshold:
+        error_rate_min: 0.05   # ≥5% errors → cut rate by 50%
+        latency_min_ms: 200    # HTTP/2 heavy: cut if latency exceeds 200ms
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 5.0
     protocols:
       http2:
         rate: 50             # base rate

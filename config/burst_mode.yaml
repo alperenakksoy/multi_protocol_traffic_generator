@@ -1,0 +1,134 @@
+# Traffic Profile: Burst Mode
+# Shows: periodic_burst pattern across all protocols simultaneously
+# Each protocol bursts at a different interval so bursts overlap irregularly —
+# creates an interesting non-uniform spike pattern in the Wireshark I/O graph.
+
+global:
+  warmup:   10
+  cooldown: 10
+
+phases:
+
+  - name: all_burst_slow
+    duration: 60
+    description: "All four protocols in burst mode with long intervals (30 s). Bursts are clearly separated in Wireshark — good for identifying each protocol's spike."
+    protocols:
+      http2:
+        rate: 10
+        payload_size: 2048
+        concurrent_streams: 8
+        pattern: periodic_burst
+        burst_rate: 200
+        burst_duration: 5
+        burst_interval: 30
+      quic:
+        rate: 10
+        payload_size: 1024
+        pattern: periodic_burst
+        burst_rate: 150
+        burst_duration: 5
+        burst_interval: 30
+      mqtt:
+        rate: 10
+        payload_size: 64
+        qos_distribution:
+          0: 80
+          1: 20
+          2: 0
+        pattern: periodic_burst
+        burst_rate: 300
+        burst_duration: 5
+        burst_interval: 30
+      tcp:
+        rate: 5
+        packet_size: 512
+        mode: normal
+        pattern: periodic_burst
+        burst_rate: 100
+        burst_duration: 5
+        burst_interval: 30
+
+  - name: all_burst_fast
+    duration: 60
+    description: "All protocols burst every 10 s. Overlapping bursts create compound spikes. Shows how multiple protocols can saturate a link simultaneously."
+    protocols:
+      http2:
+        rate: 15
+        payload_size: 4096
+        concurrent_streams: 12
+        pattern: periodic_burst
+        burst_rate: 300
+        burst_duration: 4
+        burst_interval: 10
+      quic:
+        rate: 15
+        payload_size: 2048
+        pattern: periodic_burst
+        burst_rate: 200
+        burst_duration: 4
+        burst_interval: 10
+      mqtt:
+        rate: 20
+        payload_size: 96
+        qos_distribution:
+          0: 70
+          1: 20
+          2: 10
+        pattern: periodic_burst
+        burst_rate: 400
+        burst_duration: 4
+        burst_interval: 10
+      tcp:
+        rate: 10
+        packet_size: 1024
+        mode: normal
+        pattern: periodic_burst
+        burst_rate: 150
+        burst_duration: 4
+        burst_interval: 10
+      udp:
+        rate: 10
+        packet_size: 512
+        pattern: periodic_burst
+        burst_rate: 200
+        burst_duration: 4
+        burst_interval: 10
+
+  - name: staggered_burst
+    duration: 60
+    description: "Each protocol bursts at a different interval (HTTP/2=20s, QUIC=15s, MQTT=25s, TCP=30s). Irregular compound spikes — closest to real-world mixed traffic."
+    protocols:
+      http2:
+        rate: 20
+        payload_size: 2048
+        concurrent_streams: 8
+        pattern: periodic_burst
+        burst_rate: 250
+        burst_duration: 4
+        burst_interval: 20
+      quic:
+        rate: 20
+        payload_size: 1024
+        pattern: periodic_burst
+        burst_rate: 180
+        burst_duration: 4
+        burst_interval: 15
+      mqtt:
+        rate: 30
+        payload_size: 64
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        pattern: periodic_burst
+        burst_rate: 350
+        burst_duration: 4
+        burst_interval: 25
+      tcp:
+        rate: 10
+        packet_size: 512
+        mode: normal
+        pattern: periodic_burst
+        burst_rate: 120
+        burst_duration: 4
+        burst_interval: 30

@@ -122,7 +122,10 @@ class GeneratorConfig(BaseModel):
         "example": {"rate": 30, "payload_size": 256, "qos": 1, "topic_count": 5,
                      "qos_distribution": [0.5, 0.3, 0.2], "fault_rate": 0.0, "extra_latency_ms": 0}
     })
-    rate: Optional[float] = Field(None, ge=0, description="Publish rate in messages per second.")
+    rate: Optional[float] = Field(
+        None, ge=0, le=500,
+        description="Publish rate in messages per second (capped at 500 to avoid overloading the Mosquitto broker)."
+    )
     payload_size: Optional[int] = Field(None, ge=0, description="Size (bytes) of each published message payload.")
     qos: Optional[int] = Field(
         None, ge=0, le=2,
@@ -365,6 +368,9 @@ def _send_loop():
         if effective_rate <= 0:
             time.sleep(0.1)
             continue
+
+        # Hard cap: protect the Mosquitto broker from accidental overload.
+        effective_rate = min(effective_rate, 500)
 
         interval = 1.0 / effective_rate
         if pattern == "random":

@@ -51,7 +51,20 @@ phases:
 
   - name: mqtt_mixed
     duration: 70
-    description: "Mixed QoS levels, as in a real IoT system"
+    description: "Mixed QoS levels, as in a real IoT system. Adaptive Control active."
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0    # 0% errors → increase rate +20%
+        latency_max_ms: 100    # MQTT: QoS 2 handshake adds latency; allow up to 100ms
+      scale_down_threshold:
+        error_rate_min: 0.05   # ≥5% publish failures → cut rate by 50%
+        latency_min_ms: 250    # MQTT: cut if broker latency exceeds 250ms
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 5.0
     protocols:
       mqtt:
         rate: 100

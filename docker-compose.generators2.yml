@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-Machine Deployment — MACHINE A2 (Second Generator Machine)
+# ─────────────────────────────────────────────────────────────────────────────
+# 3-MACHINE SETUP ONLY. Run this on a THIRD lab machine alongside:
+#   Machine B  → docker-compose.targets.yml   (targets + broker + metrics)
+#   Machine A1 → docker-compose.generators.yml (controller + dashboard + gen-http2 + gen-quic)
+#
+# This machine adds gen-mqtt and gen-tcpudp, both pointed at Machine B.
+# The controller on Machine A1 reaches these generators via Machine A2's IP
+# (set MACHINE_A2_IP in Machine A1's .env).
+#
+# Usage (on Machine A2):
+#   1. Start Machine B first, then Machine A1.
+#   2. Set .env on THIS machine (Machine A2):
+#        TARGET_B_IP=192.168.1.42    # Machine B's IP
+#   3. docker-compose -f docker-compose.generators2.yml up --build
+#
+# Ports exposed to the network (must be reachable from Machine A1):
+#   7003/tcp  (gen-mqtt REST control API)
+#   7004/tcp  (gen-tcpudp REST control API)
+#
+# On Machine A1 .env, also set:
+#   MACHINE_A2_IP=192.168.1.43
+#   GEN_MQTT_HOST=192.168.1.43
+#   GEN_TCPUDP_HOST=192.168.1.43
+# Then start Machine A1 with only its local generators:
+#   docker-compose -f docker-compose.generators.yml up controller dashboard gen-http2 gen-quic
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  mic-net-a2:
+    driver: bridge
+
+services:
+
+  gen-mqtt:
+    build: ./generators/mqtt
+    container_name: gen-mqtt
+    networks: [mic-net-a2]
+    ports:
+      - "7003:7003"   # exposed so Machine A1's controller can reach it
+    environment:
+      BROKER_HOST: ${TARGET_B_IP:?Set TARGET_B_IP in .env to Machine B's IP}
+      BROKER_PORT: 1883
+      METRICS_URL: http://${TARGET_B_IP}:9090
+      PORT: 7003
+    restart: unless-stopped
+
+  gen-tcpudp:
+    build: ./generators/tcpudp
+    container_name: gen-tcpudp
+    networks: [mic-net-a2]
+    ports:
+      - "7004:7004"   # exposed so Machine A1's controller can reach it
+    environment:
+      TARGET_HOST: ${TARGET_B_IP}
+      TARGET_PORT: 9999
+      METRICS_URL: http://${TARGET_B_IP}:9090
+      PORT: 7004
+    restart: unless-stopped
