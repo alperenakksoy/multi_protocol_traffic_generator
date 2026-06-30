@@ -267,35 +267,44 @@ async def _send_on_connection(conn, h3):
         _latency_window.append((time.time(), elapsed_ms))
         return
 
-    # Same random payload reused across all streams in this cycle (avoids
-    # repeated os.urandom() calls at high stream counts); each stream is an
-    # independent multiplexed HTTP/3 POST carrying `payload_size` bytes.
-    payload = os.urandom(payload_size)
-    for _ in range(streams):
-        stream_id = conn._quic.get_next_available_stream_id()
-        h3.send_headers(
-            stream_id=stream_id,
-            headers=[
-                (b":method", b"POST"),
-                (b":path",   b"/data"),
-                (b":scheme", b"https"),
-                (b":authority", TARGET_HOST.encode()),
-                (b"content-length", str(payload_size).encode()),
-            ],
-        )
-        h3.send_data(stream_id=stream_id, data=payload, end_stream=True)
-    conn.transmit()
+    try:
+        # Same random payload reused across all streams in this cycle (avoids
+        # repeated os.urandom() calls at high stream counts); each stream is an
+        # independent multiplexed HTTP/3 POST carrying `payload_size` bytes.
+        payload = os.urandom(payload_size)
+        for _ in range(streams):
+            stream_id = conn._quic.get_next_available_stream_id()
+            h3.send_headers(
+                stream_id=stream_id,
+                headers=[
+                    (b":method", b"POST"),
+                    (b":path",   b"/data"),
+                    (b":scheme", b"https"),
+                    (b":authority", TARGET_HOST.encode()),
+                    (b"content-length", str(payload_size).encode()),
+                ],
+            )
+            h3.send_data(stream_id=stream_id, data=payload, end_stream=True)
+        conn.transmit()
 
-    # Short wait for the response frames. The connection is already
-    # established, so this covers one round trip, not a fresh handshake.
-    await asyncio.sleep(0.005)
+        # Short wait for the response frames. The connection is already
+        # established, so this covers one round trip, not a fresh handshake.
+        await asyncio.sleep(0.005)
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000
-    with _lock:
-        state["packets_sent"] += streams
-        state["bytes_sent"]   += payload_size * streams
-    _bytes_window.append((time.time(), payload_size * streams))
-    _latency_window.append((time.time(), elapsed_ms))
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        with _lock:
+            state["packets_sent"] += streams
+            state["bytes_sent"]   += payload_size * streams
+        _bytes_window.append((time.time(), payload_size * streams))
+        _latency_window.append((time.time(), elapsed_ms))
+    except Exception:
+        # Connection broke mid-send. errors/reconnect are handled by _generate()'s
+        # outer try/except around _run_connection() - this just records how long
+        # the failed cycle ran before breaking, so a real outage is visible in
+        # latency_ms too, not just in errors.
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        _latency_window.append((time.time(), elapsed_ms))
+        raise
 
 
 def _is_burst_active(pattern: str, burst_duration: float, burst_interval: float) -> bool:

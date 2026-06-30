@@ -260,8 +260,13 @@ async def _send_one(client: httpx.AsyncClient):
         _latency_window.append((time.time(), elapsed_ms))
 
     except Exception:
+        # Real failure (timeout, connection refused, ...) - record how long it
+        # actually took before giving up, so latency_ms reflects genuine
+        # degradation too, not just successful requests and injected faults.
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         with _lock:
             state["errors"] += 1
+        _latency_window.append((time.time(), elapsed_ms))
 
 
 def _is_burst_active(pattern: str, burst_duration: float, burst_interval: float) -> bool:

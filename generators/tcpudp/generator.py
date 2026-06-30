@@ -240,8 +240,13 @@ def _send_tcp(data: bytes):
         _bytes_window.append((time.time(), len(data)))
         _latency_window.append((time.time(), elapsed_ms))
     except Exception:
+        # Real failure (refused/timed out after up to 2s, see settimeout above) -
+        # record how long it actually took, so latency_ms reflects genuine
+        # degradation too, not just successful sends and injected faults.
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         with _lock:
             state["errors"] += 1
+        _latency_window.append((time.time(), elapsed_ms))
     finally:
         s.close()
 
@@ -341,14 +346,20 @@ def _send_loop():
             if ramp_interval is not None:
                 interval = ramp_interval
 
+            t0 = time.perf_counter()
+
             if extra_latency > 0:
                 time.sleep(extra_latency / 1000)
 
             if fault_rate > 0 and random.random() < fault_rate:
                 # Injected fault: simulate a failed send without touching the socket.
+                # Measured (not just the raw extra_latency config value) for
+                # consistency with the other generators and with the real-failure
+                # path in _send_tcp below.
+                elapsed_ms = (time.perf_counter() - t0) * 1000
                 with _lock:
                     state["errors"] += 1
-                _latency_window.append((time.time(), extra_latency))
+                _latency_window.append((time.time(), elapsed_ms))
             else:
                 payload = os.urandom(size)
                 if proto == "tcp":

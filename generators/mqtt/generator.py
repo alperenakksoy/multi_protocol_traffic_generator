@@ -407,11 +407,18 @@ def _send_loop():
                 _bytes_window.append((time.time(), n))
                 _latency_window.append((time.time(), elapsed_ms))
             else:
+                # Real failure (broker rejected/queued the publish unsuccessfully) -
+                # record how long it took, so latency_ms reflects genuine
+                # degradation too, not just successful publishes and injected faults.
+                elapsed_ms = (time.perf_counter() - t0) * 1000
                 with _lock:
                     state["errors"] += 1
+                _latency_window.append((time.time(), elapsed_ms))
         except Exception:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
             with _lock:
                 state["errors"] += 1
+            _latency_window.append((time.time(), elapsed_ms))
 
         time.sleep(sleep_time)
 
