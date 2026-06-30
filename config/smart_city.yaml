@@ -1,0 +1,204 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: SMART CITY                                               ║
+# ║  Multi-protocol mix modelling a city-scale IoT + control infrastructure.   ║
+# ║                                                                            ║
+# ║  Real-world use case: traffic lights, parking sensors, energy meters,      ║
+# ║  emergency services, and the city web portal — all on one network stack.  ║
+# ║                                                                            ║
+# ║  Key insights:                                                             ║
+# ║    • Each protocol carries a different city sub-system                     ║
+# ║    • MQTT: sensor grid (lights, parking, air quality)                      ║
+# ║    • HTTP/2: citizen portal + data API                                     ║
+# ║    • QUIC: emergency-services video feeds (low-latency, loss-tolerant)     ║
+# ║    • TCP/UDP: bulk meter-reading uploads (nightly batch)                   ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  warmup:   15
+  cooldown: 10
+
+phases:
+
+  # ── Phase 1: Day Mode — City Running Normally ─────────────────────────────
+  - name: day_normal_ops
+    duration: 60
+    description: >
+      Daytime steady state: traffic sensors report every second, citizen portal
+      handles moderate load, emergency video feeds trickle in. All four
+      protocols active at realistic ratios. Good baseline for Wireshark.
+    protocols:
+      mqtt:
+        rate: 120
+        payload_size: 48
+        qos_distribution:
+          0: 70          # air quality, parking occupancy (lossy OK)
+          1: 25          # traffic light state changes
+          2: 5           # emergency signals (must arrive once)
+        topics:
+          - city/traffic/intersection_01
+          - city/parking/zone_A
+          - city/environment/co2
+          - city/energy/meter_bank_1
+          - city/alerts/emergency
+        pattern: constant
+      http2:
+        rate: 40
+        payload_size: 4096
+        method_distribution:
+          GET: 85        # citizens browsing city portal
+          POST: 15       # form submissions, report incidents
+        concurrent_streams: 6
+        pattern: constant
+      quic:
+        rate: 10
+        payload_size: 8192    # compressed CCTV frame snippets
+        pattern: constant
+      tcp:
+        rate: 5
+        packet_size: 1024
+        mode: normal          # utility meter batch uploads
+      udp:
+        rate: 3
+        packet_size: 512
+
+  # ── Phase 2: Rush Hour (08:00 / 17:00 Surge) ─────────────────────────────
+  - name: rush_hour
+    duration: 60
+    description: >
+      Sensor reporting rate doubles during rush hour (more events per
+      intersection). HTTP/2 portal load spikes as people check transit apps.
+      MQTT uses periodic_burst to simulate traffic light state-change storms
+      at peak congestion. Clear spike pattern in the Wireshark I/O graph.
+    protocols:
+      mqtt:
+        payload_size: 48
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        topics:
+          - city/traffic/intersection_01
+          - city/traffic/intersection_02
+          - city/traffic/ramp_meter
+          - city/parking/zone_A
+          - city/parking/zone_B
+        pattern: periodic_burst
+        burst_rate: 350
+        burst_duration: 5
+        burst_interval: 20
+      http2:
+        rate: 100
+        payload_size: 2048
+        method_distribution:
+          GET: 90
+          POST: 10
+        concurrent_streams: 12
+        pattern: constant
+      quic:
+        rate: 25
+        payload_size: 8192
+        pattern: constant
+      tcp:
+        rate: 8
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 5
+        packet_size: 512
+
+  # ── Phase 3: Emergency Event (Fault + Overload) ────────────────────────────
+  - name: emergency_event
+    duration: 60
+    description: >
+      A major incident (stadium evacuation) overloads the emergency channel.
+      HTTP/2 faults simulate the portal going down (too many requests).
+      MQTT QoS 2 carries critical emergency commands — they must get through.
+      QUIC carries live footage to emergency control room.
+      Demonstrates protocol prioritisation under stress.
+    protocols:
+      mqtt:
+        rate: 200
+        payload_size: 96
+        qos_distribution:
+          0: 20
+          1: 30
+          2: 50          # majority QoS 2 during emergency
+        fault_rate: 0.05
+        topics:
+          - city/alerts/emergency
+          - city/traffic/emergency_green
+          - city/traffic/reroute
+          - control/barriers/open
+          - alarms/evacuation
+        pattern: constant
+      http2:
+        rate: 80
+        payload_size: 2048
+        fault_rate: 0.25   # portal under DDoS / overload
+        extra_latency_ms: 300
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 16384  # HD video frames to EOC
+        pattern: constant
+      tcp:
+        rate: 10
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 8
+        packet_size: 1400
+
+  # ── Phase 4: Night Mode + Adaptive Maintenance Window ─────────────────────
+  - name: night_adaptive
+    duration: 75
+    description: >
+      After midnight: sensors switch to low-power mode (low rates), but
+      Adaptive Control handles nightly meter-reading batch that causes
+      temporary spikes. Controller scales back down once the batch is done.
+      Good demo of Adaptive Control in a "maintenance window" scenario.
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 100
+      scale_down_threshold:
+        error_rate_min: 0.03
+        latency_min_ms: 250
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 3.0
+    protocols:
+      mqtt:
+        rate: 50
+        payload_size: 32
+        qos_distribution:
+          0: 90
+          1: 10
+          2: 0
+        topics:
+          - city/energy/meter_bank_1
+          - city/energy/meter_bank_2
+          - city/environment/co2
+        pattern: constant
+      http2:
+        rate: 10
+        payload_size: 1024
+        method_distribution:
+          GET: 70
+          POST: 30        # nightly batch data API uploads
+        concurrent_streams: 4
+        pattern: constant
+      quic:
+        rate: 5
+        payload_size: 2048
+        pattern: constant
+      tcp:
+        rate: 20          # bulk meter data, scales under adaptive
+        packet_size: 1400
+        mode: normal
+      udp:
+        rate: 2
+        packet_size: 512

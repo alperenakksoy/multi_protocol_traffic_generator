@@ -1,0 +1,79 @@
+# Traffic Profile: TCP/UDP Dominant
+# Shows: raw transport layer traffic, TCP vs. UDP packet patterns
+
+global:
+  warmup:   10
+  cooldown: 10
+
+phases:
+
+  - name: tcp_dominant
+    duration: 60
+    description: "High TCP rate with large packets. Wireshark shows SYN/ACK handshakes and ACK overhead. Compare packet count to UDP phase."
+    protocols:
+      tcp:
+        rate: 80
+        packet_size: 1400
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 512
+      http2:
+        rate: 5
+        payload_size: 512
+
+  - name: udp_dominant
+    duration: 60
+    description: "UDP takes over — no handshake, no ACK. Same data rate as TCP phase but significantly fewer packets in Wireshark. Shows the overhead difference."
+    protocols:
+      udp:
+        rate: 150
+        packet_size: 1400
+      tcp:
+        rate: 5
+        packet_size: 256
+        mode: normal
+      http2:
+        rate: 5
+        payload_size: 512
+
+  - name: tcp_burst
+    duration: 60
+    description: "TCP with periodic burst pattern every 15 s. Simulates a batch upload job triggering alongside normal traffic."
+    protocols:
+      tcp:
+        rate: 20
+        packet_size: 1400
+        mode: normal
+        pattern: periodic_burst
+        burst_rate: 200
+        burst_duration: 4
+        burst_interval: 15
+      udp:
+        rate: 30
+        packet_size: 512
+      http2:
+        rate: 5
+        payload_size: 512
+
+  - name: mixed_transport
+    duration: 60
+    description: "Both TCP and UDP at high load simultaneously. Total packet rate peaks here — useful for measuring raw throughput capacity."
+    protocols:
+      tcp:
+        rate: 60
+        packet_size: 1024
+        mode: normal
+      udp:
+        rate: 80
+        packet_size: 1400
+      http2:
+        rate: 10
+        payload_size: 1024
+      mqtt:
+        rate: 20
+        payload_size: 64
+        qos_distribution:
+          0: 100
+          1: 0
+          2: 0

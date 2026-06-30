@@ -1,23 +1,27 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Multi-Machine Deployment — MACHINE B (Targets + Metrics + Broker)
+# Multi-Machine Deployment — MACHINE B (Targets + Metrics + Broker + Analyzers)
 # ─────────────────────────────────────────────────────────────────────────────
-# Run this on the SECOND lab machine. It starts the three target services,
-# the MQTT broker, and the metrics collector — everything the generators on
-# Machine A need to reach over the real network link.
+# Run this on the SECOND lab machine (works for both 2-machine and 3-machine
+# setups — Machine B is always the target machine).
 #
 # Usage (on Machine B):
 #   docker-compose -f docker-compose.targets.yml up --build
 #
-# Then find this machine's IP (needed on Machine A):
+# Then find this machine's IP (needed on Machine A / A1):
 #   ip addr show eth0      # Linux
 #   ipconfig getifaddr en0 # macOS
 #
 # Make sure the firewall on this machine allows inbound connections on:
-#   8080/tcp  (HTTP/2 target)
-#   4433/udp  (QUIC target)
-#   9999/tcp, 9999/udp (TCP/UDP sink)
-#   1883/tcp  (MQTT broker)
-#   9090/tcp  (Metrics collector)
+#   8080/tcp       (HTTP/2 target)
+#   4433/udp       (QUIC target)
+#   9999/tcp+udp   (TCP/UDP sink)
+#   1883/tcp       (MQTT broker)
+#   9090/tcp       (Metrics collector — queried by dashboard on Machine A)
+#
+# The 4 analyzer sidecars run here, next to their targets, so they can
+# capture real inter-machine traffic on the physical network interface.
+# They push data to the metrics service on this machine; the dashboard on
+# Machine A reads aggregated results via GET http://<B_IP>:9090/analysis.
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
@@ -86,4 +90,66 @@ services:
     ports:
       - "9999:9999"
       - "9999:9999/udp"
+    restart: unless-stopped
+
+  # ── Network Analyzers (packet-capture sidecars) ───────────────────────────
+  # Each analyzer shares its target's network namespace so it sees real
+  # inter-machine frames on eth0 — the physical link, not a Docker bridge.
+  # They push live protocol statistics to the metrics service on this machine.
+  # The dashboard on Machine A polls GET http://<B_IP>:9090/analysis for them.
+
+  analyzer-http2:
+    build: ./analyzer
+    container_name: analyzer-http2
+    network_mode: "service:target-http2"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-http2
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-http2
+      - metrics
+    restart: unless-stopped
+
+  analyzer-quic:
+    build: ./analyzer
+    container_name: analyzer-quic
+    network_mode: "service:target-quic"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-quic
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-quic
+      - metrics
+    restart: unless-stopped
+
+  analyzer-mqtt:
+    build: ./analyzer
+    container_name: analyzer-mqtt
+    network_mode: "service:mosquitto"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: mosquitto
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - mosquitto
+      - metrics
+    restart: unless-stopped
+
+  analyzer-tcpudp:
+    build: ./analyzer
+    container_name: analyzer-tcpudp
+    network_mode: "service:target-tcpudp"
+    cap_add: [NET_RAW, NET_ADMIN]
+    environment:
+      ANALYZER_NAME: target-tcpudp
+      IFACE: eth0
+      METRICS_URL: http://metrics:9090
+    depends_on:
+      - target-tcpudp
+      - metrics
     restart: unless-stopped

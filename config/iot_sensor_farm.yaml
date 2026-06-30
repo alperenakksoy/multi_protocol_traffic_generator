@@ -1,0 +1,138 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  Traffic Profile: IoT SENSOR FARM                                          ║
+# ║  Simulates hundreds of embedded sensors reporting over MQTT.                ║
+# ║                                                                            ║
+# ║  Real-world use case: industrial sensor grid (factory floor, warehouse,    ║
+# ║  smart agriculture) where devices send readings at fixed intervals.        ║
+# ║                                                                            ║
+# ║  Key insight for the demo:                                                 ║
+# ║    • Phase 1: steady "heartbeat" at low QoS (fire-and-forget readings)     ║
+# ║    • Phase 2: burst when a shift starts — many devices wake up at once     ║
+# ║    • Phase 3: critical alarm path uses QoS 2 (exactly-once delivery)       ║
+# ║    • In Wireshark: filter on `mqtt` — watch packet counts jump in Phase 2  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+global:
+  warmup:   10
+  cooldown: 10
+
+phases:
+
+  # ── Phase 1: Steady Heartbeat ─────────────────────────────────────────────
+  - name: steady_heartbeat
+    duration: 60
+    description: >
+      100 msg/s, all QoS 0. Tiny 32-byte payloads — just a sensor ID + value.
+      Represents the background "I'm alive" stream typical in IoT fleets.
+      In Wireshark: constant low-bandwidth MQTT flow.
+    protocols:
+      mqtt:
+        rate: 100
+        payload_size: 32
+        qos_distribution:
+          0: 100
+          1: 0
+          2: 0
+        topics:
+          - sensors/temperature
+          - sensors/humidity
+          - sensors/co2
+          - sensors/pressure
+          - sensors/vibration
+        pattern: constant
+      tcp:
+        rate: 2        # minimal management traffic
+        packet_size: 128
+        mode: normal
+
+  # ── Phase 2: Morning Shift Surge ──────────────────────────────────────────
+  - name: shift_startup_burst
+    duration: 60
+    description: >
+      Periodic burst every 15 s simulates entire sensor rows powering up
+      simultaneously (shift-change sync). Base 50 msg/s spikes to 400 msg/s
+      for 4 seconds. In Wireshark: sharp vertical spikes in the I/O graph.
+    protocols:
+      mqtt:
+        payload_size: 64
+        qos_distribution:
+          0: 80
+          1: 20
+          2: 0
+        topics:
+          - sensors/temperature
+          - sensors/humidity
+          - sensors/motion
+          - actuators/valve
+          - actuators/pump
+        pattern: periodic_burst
+        burst_rate: 400
+        burst_duration: 4
+        burst_interval: 15
+      tcp:
+        rate: 3
+        mode: normal
+
+  # ── Phase 3: Critical Alarm Path (QoS 2) ──────────────────────────────────
+  - name: alarm_qos2
+    duration: 60
+    description: >
+      Only 30 msg/s but 100% QoS 2 (exactly-once, 4-packet handshake).
+      Results in ~120 packets/s — 4x higher than the message rate suggests.
+      Compare to Phase 1 at 100 msg/s with QoS 0 (100 packets/s).
+      Great Wireshark talking point: same I/O graph height, different semantics.
+    protocols:
+      mqtt:
+        rate: 30
+        payload_size: 96
+        qos_distribution:
+          0: 0
+          1: 0
+          2: 100
+        topics:
+          - alarms/fire
+          - alarms/flood
+          - alarms/gas_leak
+          - control/emergency_stop
+      tcp:
+        rate: 2
+        mode: normal
+
+  # ── Phase 4: Adaptive Fleet Scaling ───────────────────────────────────────
+  - name: adaptive_fleet
+    duration: 75
+    description: >
+      Adaptive Control active. Controller scales MQTT rate up (×1.2) when
+      QoS delivery is clean, scales down (×0.5) when broker latency spikes.
+      Mimics a system that auto-throttles devices when the broker is under load.
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 80
+      scale_down_threshold:
+        error_rate_min: 0.03
+        latency_min_ms: 200
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 4.0
+    protocols:
+      mqtt:
+        rate: 150
+        payload_size: 64
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+        topics:
+          - sensors/temperature
+          - sensors/humidity
+          - sensors/pressure
+          - control/actuator_001
+          - alarms/critical
+        pattern: constant
+      tcp:
+        rate: 3
+        mode: normal

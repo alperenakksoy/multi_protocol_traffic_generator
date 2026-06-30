@@ -1,0 +1,138 @@
+# Traffic Profile: Fault Injection
+# Shows: how injected errors affect each protocol differently
+# Useful for resilience testing and demonstrating error recovery behavior.
+
+global:
+  warmup:   10
+  cooldown: 10
+
+phases:
+
+  - name: fault_low
+    duration: 60
+    description: "5% fault rate on all protocols. Errors appear in the dashboard but traffic continues. Baseline for fault injection comparison."
+    protocols:
+      http2:
+        rate: 60
+        payload_size: 2048
+        fault_rate: 0.05
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 1024
+        fault_rate: 0.05
+        pattern: constant
+      mqtt:
+        rate: 80
+        payload_size: 64
+        fault_rate: 0.05
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+      tcp:
+        rate: 20
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256
+
+  - name: fault_medium
+    duration: 60
+    description: "25% fault rate — one in four requests fails. Error rate clearly visible in the dashboard. Latency also injected on HTTP/2 to simulate a slow upstream."
+    protocols:
+      http2:
+        rate: 60
+        payload_size: 2048
+        fault_rate: 0.25
+        extra_latency_ms: 150
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 1024
+        fault_rate: 0.25
+        pattern: constant
+      mqtt:
+        rate: 80
+        payload_size: 64
+        fault_rate: 0.25
+        qos_distribution:
+          0: 50
+          1: 30
+          2: 20
+      tcp:
+        rate: 20
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256
+
+  - name: fault_heavy
+    duration: 60
+    description: "50% fault rate — half of all requests fail. A clear stress test. HTTP/2 and QUIC error rates should be near 50%. MQTT QoS 2 retries keep some messages through."
+    protocols:
+      http2:
+        rate: 60
+        payload_size: 2048
+        fault_rate: 0.50
+        extra_latency_ms: 300
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 1024
+        fault_rate: 0.50
+        pattern: constant
+      mqtt:
+        rate: 80
+        payload_size: 64
+        fault_rate: 0.50
+        qos_distribution:
+          0: 20
+          1: 30
+          2: 50          # mostly QoS 2 — exactly-once delivery fights the faults
+      tcp:
+        rate: 20
+        packet_size: 512
+        mode: normal
+
+  - name: fault_recovery
+    duration: 60
+    description: "Faults cleared, Adaptive Control active. Controller ramps rates back up as errors drop. Shows the system recovering from the previous fault phases."
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.01
+        latency_max_ms: 80
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 200
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 4.0
+    protocols:
+      http2:
+        rate: 60
+        payload_size: 2048
+        pattern: constant
+      quic:
+        rate: 40
+        payload_size: 1024
+        pattern: constant
+      mqtt:
+        rate: 80
+        payload_size: 64
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+      tcp:
+        rate: 20
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256

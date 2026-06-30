@@ -1,0 +1,137 @@
+# Traffic Profile: Adaptive Only
+# Shows: Adaptive Control in isolation — from the very first phase
+# All protocols start at a moderate fixed rate, then Adaptive Control
+# takes over immediately and drives all rate decisions automatically.
+
+global:
+  warmup:   15
+  cooldown: 10
+
+phases:
+
+  - name: adaptive_baseline
+    duration: 60
+    description: "Balanced load, Adaptive Control active from the start. Scales up by x1.2 every 5 s as long as error_rate = 0. Rates climb automatically over the phase."
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 100
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 250
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.5
+      max_multiplier: 6.0
+    protocols:
+      http2:
+        rate: 30
+        payload_size: 2048
+        concurrent_streams: 6
+        pattern: constant
+      quic:
+        rate: 20
+        payload_size: 1024
+        pattern: constant
+      mqtt:
+        rate: 40
+        payload_size: 64
+        qos_distribution:
+          0: 70
+          1: 20
+          2: 10
+      tcp:
+        rate: 10
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 8
+        packet_size: 256
+
+  - name: adaptive_under_pressure
+    duration: 75
+    description: "Faults injected mid-profile — Adaptive Control must react and scale down. Scale-down threshold: error_rate >= 5%. Watch multiplier drop in the Adaptive tab."
+    adaptive_control:
+      enabled: true
+      check_interval: 4
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 80
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 200
+      scale_up_factor: 1.15
+      scale_down_factor: 0.4
+      min_multiplier: 0.05
+      max_multiplier: 5.0
+    protocols:
+      http2:
+        rate: 50
+        payload_size: 2048
+        fault_rate: 0.15        # inject faults so adaptive kicks in
+        extra_latency_ms: 100
+        concurrent_streams: 8
+        pattern: constant
+      quic:
+        rate: 35
+        payload_size: 1024
+        fault_rate: 0.10
+        pattern: constant
+      mqtt:
+        rate: 60
+        payload_size: 64
+        fault_rate: 0.08
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+      tcp:
+        rate: 15
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256
+
+  - name: adaptive_recovery
+    duration: 60
+    description: "Faults cleared. Adaptive Control ramps rates back up slowly. Multiplier climbs from wherever the previous phase left it. Shows the recovery curve."
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 80
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 200
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.05
+      max_multiplier: 5.0
+    protocols:
+      http2:
+        rate: 50
+        payload_size: 2048
+        concurrent_streams: 8
+        pattern: constant
+      quic:
+        rate: 35
+        payload_size: 1024
+        pattern: constant
+      mqtt:
+        rate: 60
+        payload_size: 64
+        qos_distribution:
+          0: 60
+          1: 30
+          2: 10
+      tcp:
+        rate: 15
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 10
+        packet_size: 256

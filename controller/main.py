@@ -9,7 +9,7 @@ All configuration changes and adaptive decisions are logged with timestamps
 and exposed via GET /log and GET /status.
 """
 
-import os, glob, asyncio
+import os, glob, asyncio, subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Any, Optional
@@ -76,7 +76,7 @@ GENERATORS = {
     "gen-tcpudp": os.getenv("GEN_TCPUDP_URL", "http://gen-tcpudp:7004"),
 }
 METRICS_URL  = os.getenv("METRICS_URL", "http://metrics:9090")
-CONFIG_DIR   = "/app/config"
+CONFIG_DIR   = os.getenv("CONFIG_DIR", "/app/config")
 
 # Docker containers default to UTC, but the dashboard's "now()" uses the
 # browser's local time (Europe/Berlin, i.e. CET/CEST). Without this, every
@@ -107,16 +107,17 @@ state: dict[str, Any] = {
 log_entries: list[dict] = []
 
 
-def _log(message: str, level: str = "info"):
+def _log(message: str, level: str = "info", source: str = "controller"):
     entry = {
         "time":    datetime.now(LOG_TZ).strftime("%H:%M:%S"),
         "level":   level,
-        "message": message,
+        "msg":     message,
+        "source":  source,
     }
     log_entries.append(entry)
-    if len(log_entries) > 200:
-        log_entries.pop(0)
-    print(f"[{entry['time']}] {message}")
+    if len(log_entries) > 500:
+        del log_entries[:-500]
+    print(f"[{entry['time']}] [{source}] {message}")
 
 
 # ── Pydantic models (for Swagger / OpenAPI) ─────────────────────────────────────
@@ -144,9 +145,10 @@ class GeneratorPatch(BaseModel):
 
 
 class LogEntry(BaseModel):
-    time: str = Field(..., description="HH:MM:SS timestamp")
-    level: str = Field(..., description="info | success | adaptive")
-    message: str
+    time:    str = Field(..., description="HH:MM:SS timestamp")
+    level:   str = Field(..., description="info | success | error | adaptive")
+    msg:     str = Field(..., description="Log message text")
+    source:  str = Field("controller", description="Origin: controller | gen-http2 | gen-quic | gen-mqtt | gen-tcpudp")
 
 
 class LogResponse(BaseModel):
@@ -425,28 +427,41 @@ async def _adaptive_loop(adaptive_cfg: dict):
                 ):
                     action = "up"
 
+                old_mult = multipliers[name]
                 if action == "up":
                     multipliers[name] = min(max_multiplier, multipliers[name] * up_factor)
                 elif action == "down":
                     multipliers[name] = max(min_multiplier, multipliers[name] * down_factor)
+
+                # Only PATCH + log when the multiplier actually moved.
+                # When we are already pinned at max or min, the calculation
+                # above returns the same value, so there is nothing to apply
+                # and nothing useful to log.
+                changed = abs(multipliers[name] - old_mult) > 0.001
 
                 applied = {k: max(1, round(v * multipliers[name])) for k, v in base_rates.items()}
 
                 state["adaptive_status"][name] = {
                     "multiplier":  round(multipliers[name], 3),
                     "error_rate":  round(error_rate, 4),
-                    "action":      action,
+                    "action":      action if changed else "hold",
                     "applied":     applied,
                     "checked_at":  datetime.now(LOG_TZ).strftime("%H:%M:%S"),
                 }
 
-                if action in ("up", "down"):
+                if action in ("up", "down") and changed:
                     await _call("patch", f"{GENERATORS[name]}/config", json=applied)
                     arrow = "↑" if action == "up" else "↓"
+                    cap = ""
+                    if multipliers[name] >= max_multiplier:
+                        cap = " [at max]"
+                    elif multipliers[name] <= min_multiplier:
+                        cap = " [at min]"
                     _log(
-                        f"ADAPTIVE {arrow} {name}: error_rate={error_rate:.1%} "
-                        f"→ ×{multipliers[name]:.2f} → {applied}",
+                        f"ADAPTIVE {arrow} error_rate={error_rate:.1%} "
+                        f"→ ×{multipliers[name]:.2f}{cap} → {applied}",
                         "adaptive",
+                        source=name,
                     )
     except asyncio.CancelledError:
         _log("Adaptive Control stopped", "adaptive")
@@ -497,11 +512,10 @@ async def _run_phases(profile_data: dict):
             if cfg:
                 await _call("patch", f"{GENERATORS[name]}/config", json=cfg)
 
-        adaptive_cfg = phase.get("adaptive_control")
-        if adaptive_cfg and adaptive_cfg.get("enabled"):
-            _start_adaptive(adaptive_cfg)
-        else:
-            _stop_adaptive()
+        # Adaptive control is only started/stopped via the dashboard toggle.
+        # Profile phase YAML may define an adaptive_control block but it is
+        # used only when the user explicitly enables the toggle (see /adaptive).
+        pass
 
         await asyncio.sleep(phase.get("duration", 60))
 
@@ -513,9 +527,13 @@ async def _run_phases(profile_data: dict):
         _log(f"Cooldown: ramping rates down over {cooldown}s", "info")
         await _ramp_rates(_phase_to_gen_configs(phases[-1]), cooldown, "down", "cooldown")
 
-    state["running"] = False
     state["active_phase"] = None
-    _log("All phases completed", "success")
+    _log(
+        f"All phases of '{state.get('active_profile', 'profile')}' completed. "
+        "Generators are still running at their last configured rates. "
+        "Click Stop to end traffic generation.",
+        "success",
+    )
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -556,10 +574,18 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
             }
         for name, cfg in start_configs.items():
             if cfg:
-                await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                result = await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                if "error" in result:
+                    _log(f"Unreachable at start: {result['error']}", "error", source=name)
+                else:
+                    _log("Started", "success", source=name)
     else:
-        for url in GENERATORS.values():
-            await _call("post", f"{url}/start", json={})
+        for name, url in GENERATORS.items():
+            result = await _call("post", f"{url}/start", json={})
+            if "error" in result:
+                _log(f"Unreachable at start: {result['error']}", "error", source=name)
+            else:
+                _log("Started", "success", source=name)
 
     # Start phase runner in background
     loop = asyncio.get_event_loop()
@@ -586,7 +612,10 @@ async def stop():
 
     for name, url in GENERATORS.items():
         result = await _call("post", f"{url}/stop")
-        _log(f"Stopped {name}: {result.get('ok', result.get('error', '?'))}")
+        if "error" in result:
+            _log(f"Stop failed: {result['error']}", "error", source=name)
+        else:
+            _log("Stopped", "info", source=name)
 
     state["active_phase"] = None
     _log("System stopped", "info")
@@ -609,24 +638,46 @@ async def load_config(body: ConfigLoadRequest = Body(...)):
         raise HTTPException(404, str(e))
 
     state["active_profile"] = profile
-    _log(f"Loaded profile '{profile}'")
+    _log(f"Profile '{profile}' loaded")
 
     if state["running"]:
-        # Cancel the existing phase runner so it doesn't overwrite
-        # the new profile's config when its sleep timer expires.
+        # Cancel the existing phase runner and adaptive loop immediately so
+        # neither overwrites our new config after we apply it.
         if state["phase_task"]:
             state["phase_task"].cancel()
             state["phase_task"] = None
         _stop_adaptive()
+        state["ramp_status"] = None
 
         phases = profile_data.get("phases", [])
         if phases:
             configs = _phase_to_gen_configs(phases[0])
-            for name, cfg in configs.items():
-                if cfg:
-                    await _call("patch", f"{GENERATORS[name]}/config", json=cfg)
+            warmup = profile_data.get("global", {}).get("warmup", 0)
+            start_configs = configs
+            if warmup > 0:
+                # Profile has a warmup: start at rate 0 so _run_phases can
+                # ramp up cleanly from zero instead of jumping from whatever
+                # rate the previous profile left behind.
+                start_configs = {
+                    name: {**cfg, **{k: 0 for k in RATE_FIELDS.get(name, []) if k in cfg}}
+                    for name, cfg in configs.items()
+                }
 
-        # Restart the phase runner with the new profile
+            # Stop every generator first to reset their internal state (error
+            # counters, latency windows, etc.) so the new profile starts fresh.
+            for name, url in GENERATORS.items():
+                await _call("post", f"{url}/stop")
+
+            # Then restart with the new profile's phase-1 config.
+            for name, cfg in start_configs.items():
+                if cfg:
+                    result = await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                    if "error" in result:
+                        _log(f"Unreachable: {result['error']}", "error", source=name)
+                    else:
+                        _log("Restarted with new profile", "success", source=name)
+
+        # Launch the new phase runner.
         loop = asyncio.get_event_loop()
         state["phase_task"] = loop.create_task(_run_phases(profile_data))
 
@@ -650,7 +701,7 @@ async def patch_generator(
 
     url = GENERATORS[name]
     result = await _call("patch", f"{url}/config", json=body.model_dump(exclude_none=True))
-    _log(f"Patched {name}: {body.model_dump(exclude_none=True)}")
+    _log(f"Config patched: {body.model_dump(exclude_none=True)}", "info", source=name)
     return {"ok": True, "note": str(result)}
 
 
@@ -666,10 +717,10 @@ async def start_generator(name: str):
     if name not in GENERATORS:
         raise HTTPException(404, f"Unknown generator '{name}'. Valid: {list(GENERATORS)}")
     result = await _call("post", f"{GENERATORS[name]}/start", json={})
-    if "error" in result:                                                 # ← add
-        _log(f"Failed to start {name}: {result['error']}", "error")      # ← add
-        raise HTTPException(502, detail=f"Generator {name} unreachable: {result['error']}")  # ← add
-    _log(f"Started {name}")
+    if "error" in result:
+        _log(f"Start failed: {result['error']}", "error", source=name)
+        raise HTTPException(502, detail=f"Generator {name} unreachable: {result['error']}")
+    _log("Started (manual toggle)", "success", source=name)
     return {"ok": True, "note": str(result)}
 
 
@@ -685,7 +736,7 @@ async def stop_generator(name: str):
     if name not in GENERATORS:
         raise HTTPException(404, f"Unknown generator '{name}'. Valid: {list(GENERATORS)}")
     result = await _call("post", f"{GENERATORS[name]}/stop")
-    _log(f"Stopped {name}")
+    _log("Stopped (manual toggle)", "info", source=name)
     return {"ok": True, "note": str(result)}
 
 
@@ -789,6 +840,35 @@ async def adaptive_toggle(enabled: bool = Query(..., description="true to enable
         _log("Adaptive Control manually disabled", "adaptive")
 
     return {"ok": True, "enabled": state["adaptive_enabled"]}
+
+
+_ALLOWED_LOG_CONTAINERS = {
+    "controller", "gen-http2", "gen-quic", "gen-mqtt", "gen-tcpudp",
+    "target-http2", "target-quic", "target-tcpudp", "mosquitto"
+}
+
+@app.get(
+    "/logs/{container}",
+    tags=["Monitoring"],
+    summary="Raw Docker logs for a container",
+)
+async def container_logs(container: str, lines: int = Query(300, ge=1, le=2000)):
+    if container not in _ALLOWED_LOG_CONTAINERS:
+        raise HTTPException(400, f"Unknown container '{container}'")
+    try:
+        result = subprocess.run(
+            ["docker", "logs", "--tail", str(lines), "--timestamps", container],
+            capture_output=True, text=True, timeout=8
+        )
+        # docker logs writes to stderr; combine both streams
+        combined = (result.stderr + result.stdout).strip()
+        return {"container": container, "lines": combined.split("\n") if combined else []}
+    except FileNotFoundError:
+        raise HTTPException(503, "docker CLI not available inside container")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, "docker logs timed out")
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
 
 
 @app.get(

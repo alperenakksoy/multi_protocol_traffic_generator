@@ -1,0 +1,93 @@
+# Traffic Profile: QUIC Dominant
+# Shows: 0-RTT session resumption, low-latency UDP-based transport vs. TCP
+
+global:
+  warmup:   15
+  cooldown: 10
+
+phases:
+
+  - name: quic_baseline
+    duration: 60
+    description: "QUIC at moderate rate alongside minimal HTTP/2. Establishes the baseline packet pattern for comparison."
+    protocols:
+      quic:
+        rate: 80
+        payload_size: 1024
+        pattern: constant
+      http2:
+        rate: 10
+        payload_size: 512
+        pattern: constant
+      tcp:
+        rate: 2
+        packet_size: 256
+        mode: normal
+
+  - name: quic_high_throughput
+    duration: 60
+    description: "QUIC pushed to high rate with large payloads. Demonstrates 0-RTT resumption — no TCP handshake overhead. Compare latency_ms to HTTP/2."
+    protocols:
+      quic:
+        rate: 200
+        payload_size: 8192
+        pattern: constant
+      http2:
+        rate: 15
+        payload_size: 1024
+        pattern: constant
+      tcp:
+        rate: 3
+        packet_size: 512
+        mode: normal
+      udp:
+        rate: 5
+        packet_size: 256
+
+  - name: quic_burst
+    duration: 60
+    description: "Periodic burst on QUIC every 20 s. Burst rate 400 req/s for 5 s. In Wireshark: sharp UDP spikes, no TCP SYN/ACK overhead before each burst."
+    protocols:
+      quic:
+        rate: 50
+        payload_size: 2048
+        pattern: periodic_burst
+        burst_rate: 400
+        burst_duration: 5
+        burst_interval: 20
+      http2:
+        rate: 10
+        payload_size: 512
+        pattern: constant
+      tcp:
+        rate: 2
+        mode: normal
+
+  - name: quic_adaptive
+    duration: 75
+    description: "Adaptive Control on QUIC: scales up when latency is low, backs off on errors. Multiplier visible in the Adaptive tab."
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0
+        latency_max_ms: 40
+      scale_down_threshold:
+        error_rate_min: 0.05
+        latency_min_ms: 120
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 5.0
+    protocols:
+      quic:
+        rate: 150
+        payload_size: 4096
+        pattern: constant
+      http2:
+        rate: 10
+        payload_size: 512
+        pattern: constant
+      tcp:
+        rate: 2
+        mode: normal
