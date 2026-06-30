@@ -12,9 +12,10 @@ app = Flask(__name__)
 lock = threading.Lock()
 
 store = {
-    "generators": {},   # name → latest stat snapshot
-    "analyzers":  {},   # name → latest network-analyzer snapshot (totals + io_graph)
-    "start_time": time.time(),
+    "generators":      {},   # name → latest stat snapshot
+    "generators_prev": {},   # name → snapshot before the latest one (for windowed error_rate)
+    "analyzers":       {},   # name → latest network-analyzer snapshot (totals + io_graph)
+    "start_time":      time.time(),
 }
 
 
@@ -28,9 +29,25 @@ def update():
 
     name = payload["generator"]
     with lock:
+        prev = store["generators"].get(name)
+        if prev is not None:
+            store["generators_prev"][name] = prev
         store["generators"][name] = {**payload, "_ts": time.time()}
 
     return jsonify({"ok": True})
+
+
+# ── Error rate ──────────────────────────────────────────────────────────────────
+# Each generator counts `packets_sent` (successful sends) and `errors` (failed /
+# fault-injected sends) as disjoint counters - they are NOT errors-out-of-total.
+# The error rate is therefore errors / (errors + packets_sent), i.e. errors as a
+# fraction of total attempts. Dividing by packets_sent alone (as the dashboard
+# and Adaptive Control each used to do independently) overstates the rate at
+# moderate fault levels and breaks completely at fault_rate=1.0, where
+# packets_sent never leaves 0 (0/0 reads as "no errors" instead of 100%).
+def _error_rate(errors: int, packets: int) -> float:
+    total = errors + packets
+    return round(errors / total, 4) if total > 0 else 0.0
 
 
 # ── Aggregated metrics endpoint ────────────────────────────────────────────────
@@ -38,7 +55,8 @@ def update():
 @app.route("/metrics", methods=["GET"])
 def metrics():
     with lock:
-        gens = dict(store["generators"])
+        gens  = {name: dict(g) for name, g in store["generators"].items()}
+        prevs = dict(store["generators_prev"])
 
     total_packets = sum(g.get("packets_sent", 0) for g in gens.values())
     total_bytes   = sum(g.get("bytes_sent",   0) for g in gens.values())
@@ -47,12 +65,39 @@ def metrics():
     # bytes per second over the last 5 seconds (rough estimate)
     rate_bps = sum(g.get("rate_bps", 0) for g in gens.values())
 
+    # Per-generator error_rate, windowed to the delta since the previous /update
+    # push (~5s, the generators' own reporting cadence) so it reflects *current*
+    # conditions - the same recency Adaptive Control needs to react promptly -
+    # rather than being diluted by a long demo's history. Falls back to the
+    # lifetime rate when there's no prior snapshot yet (just started) or no new
+    # attempts since then (idle).
+    sum_d_packets = 0
+    sum_d_errors  = 0
+    for name, g in gens.items():
+        prev      = prevs.get(name, {})
+        packets   = g.get("packets_sent", 0)
+        errors    = g.get("errors", 0)
+        d_packets = max(0, packets - prev.get("packets_sent", 0))
+        d_errors  = max(0, errors  - prev.get("errors", 0))
+        if d_packets + d_errors > 0:
+            g["error_rate"] = _error_rate(d_errors, d_packets)
+            sum_d_packets  += d_packets
+            sum_d_errors   += d_errors
+        else:
+            g["error_rate"] = _error_rate(errors, packets)
+
+    error_rate = (
+        _error_rate(sum_d_errors, sum_d_packets) if (sum_d_packets + sum_d_errors) > 0
+        else _error_rate(total_errors, total_packets)
+    )
+
     return jsonify({
         "uptime_seconds": int(time.time() - store["start_time"]),
         "total_packets":  total_packets,
         "total_bytes":    total_bytes,
         "total_errors":   total_errors,
         "rate_bps":       rate_bps,
+        "error_rate":     error_rate,
         "generators":     gens,
     })
 
@@ -151,6 +196,7 @@ def reset():
             store["generators"][name]["packets_sent"] = 0
             store["generators"][name]["bytes_sent"]   = 0
             store["generators"][name]["errors"]        = 0
+        store["generators_prev"] = {}
         store["start_time"] = time.time()
     return jsonify({"ok": True})
 

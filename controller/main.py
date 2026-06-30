@@ -347,8 +347,11 @@ async def _adaptive_loop(adaptive_cfg: dict):
     """
     Autonomous control loop.
 
-    Every `check_interval` seconds, computes the error rate (errors / packets sent
-    since the last check) for each generator. If the error rate is at or below
+    Every `check_interval` seconds, reads each generator's `error_rate` from
+    GET /metrics (errors as a fraction of total attempts - errors + packets_sent -
+    computed once in metrics/collector.py so the dashboard and Adaptive Control
+    always agree on the same number; see _error_rate() there for why dividing by
+    packets_sent alone is wrong). If the error rate is at or below
     `scale_up_threshold.error_rate_max`, the generator's rate is scaled up by
     `scale_up_factor`. If it is at or above `scale_down_threshold.error_rate_min`,
     the rate is scaled down by `scale_down_factor`. Otherwise the rate is held.
@@ -380,7 +383,7 @@ async def _adaptive_loop(adaptive_cfg: dict):
 
     baseline = await _get_current_rates()
     multipliers = {name: 1.0 for name in baseline}
-    prev_totals: dict[str, dict[str, int]] = {}
+    prev_activity: dict[str, int] = {}  # name -> packets_sent + errors at the last check
 
     _log(
         f"Adaptive Control started "
@@ -402,15 +405,16 @@ async def _adaptive_loop(adaptive_cfg: dict):
                 packets = g.get("packets_sent", 0)
                 errors  = g.get("errors", 0)
                 latency = g.get("latency_ms")
+                # Pre-computed by metrics/collector.py: errors / (errors + packets_sent),
+                # windowed to the delta since the generator's last report.
+                error_rate = g.get("error_rate", 0.0)
 
-                prev = prev_totals.get(name, {"packets": 0, "errors": 0})
-                d_packets = max(0, packets - prev["packets"])
-                d_errors  = max(0, errors - prev["errors"])
-                error_rate = (d_errors / d_packets) if d_packets > 0 else 0.0
-                prev_totals[name] = {"packets": packets, "errors": errors}
+                total_activity = packets + errors
+                had_activity = total_activity > prev_activity.get(name, 0)
+                prev_activity[name] = total_activity
 
                 action = "hold"
-                if d_packets == 0:
+                if not had_activity:
                     action = "hold"
                 elif error_rate >= error_rate_min or (
                     latency_min_ms is not None and latency is not None and latency >= latency_min_ms

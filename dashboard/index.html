@@ -1917,8 +1917,8 @@
     document.getElementById('kpi-packets').textContent = fmtNum(m.total_packets);
     document.getElementById('kpi-rate').textContent    = fmtBytes(m.rate_bps);
 
-    const errRate = m.total_packets > 0
-      ? ((m.total_errors / m.total_packets) * 100).toFixed(1) + '%'
+    const errRate = (m.error_rate !== undefined)
+      ? (m.error_rate * 100).toFixed(1) + '%'
       : '0%';
     document.getElementById('kpi-errors').textContent = errRate;
 
@@ -2312,7 +2312,12 @@
         '<div style="font-size:12px;color:var(--text-light);padding:8px 0">No captured packets yet.</div>';
     }
 
-    const ioGraph   = analysis.io_graph || [];
+    // Drop the last point: it's the current, still-accumulating second (the
+    // analyzer posts it mid-flight every ~1s), so it's almost always
+    // incomplete. Charting it as-is makes a protocol with 0 bytes captured
+    // *so far this second* look like it dropped to 0, even though traffic
+    // is continuing normally - the bucket just isn't closed yet.
+    const ioGraph   = (analysis.io_graph || []).slice(0, -1);
     const seriesMap = {};
     ['http2', 'quic', 'mqtt', 'tcpudp'].forEach(k => {
       seriesMap[k] = ioGraph.map(point => (point[k] ? point[k].bytes : 0));
