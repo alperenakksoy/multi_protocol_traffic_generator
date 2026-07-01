@@ -8,8 +8,7 @@ the HTTP/2 target server's /data endpoint.
 Uses a self-signed TLS certificate generated in the Dockerfile.
 """
 
-import asyncio, os, time, threading
-import requests as req_sync
+import asyncio, threading
 from aioquic.asyncio.server import serve
 from aioquic.h3.connection import H3_ALPN
 from aioquic.h3.events import HeadersReceived, DataReceived
@@ -17,7 +16,6 @@ from aioquic.quic.configuration import QuicConfiguration
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.h3.connection import H3Connection
 
-METRICS_URL = os.getenv("METRICS_URL", "http://metrics:9090")
 HOST = "0.0.0.0"
 PORT = 4433
 
@@ -81,31 +79,12 @@ class H3Handler(QuicConnectionProtocol):
         self.transmit()
 
 
-def _report():
-    while True:
-        time.sleep(10)
-        with _lock:
-            payload = {
-                "generator":    "target-quic",
-                "running":      True,
-                "packets_sent": counter["requests"],
-                "bytes_sent":   counter["bytes_in"],
-                "errors":       0,
-            }
-        try:
-            req_sync.post(f"{METRICS_URL}/update", json=payload, timeout=2)
-        except Exception:
-            pass
-
-
 async def main():
     config = QuicConfiguration(
         alpn_protocols=H3_ALPN,
         is_client=False,
     )
     config.load_cert_chain("cert.pem", "key.pem")
-
-    threading.Thread(target=_report, daemon=True).start()
 
     await serve(HOST, PORT, configuration=config, create_protocol=H3Handler)
     await asyncio.Future()  # run forever

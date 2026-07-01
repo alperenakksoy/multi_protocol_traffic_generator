@@ -78,6 +78,8 @@ state = {
 }
 
 _lock = threading.Lock()
+# Set by /stop to wake the send loop immediately; cleared by /start so waits work normally.
+_stop_requested = threading.Event()
 _bytes_window: list[tuple[float, int]] = []
 _latency_window: list[tuple[float, float]] = []
 
@@ -114,6 +116,13 @@ class GeneratorConfig(BaseModel):
                      "increases linearly from `ramp_start_rate` to `ramp_end_rate` over "
                      "`ramp_duration` seconds, then holds at `ramp_end_rate`; split into "
                      "TCP/UDP using `tcp_ratio`)."
+    )
+    rate: Optional[float] = Field(
+        None, ge=0,
+        description="Combined TCP+UDP packets/sec shorthand: distributes into tcp_rate and udp_rate "
+                     "using the current tcp_ratio (default 60/40). Equivalent to setting "
+                     "tcp_rate=rate*tcp_ratio/100 and udp_rate=rate*(1-tcp_ratio/100). "
+                     "Providing tcp_rate/udp_rate directly overrides this."
     )
     tcp_rate: Optional[float] = Field(None, ge=0, description="TCP packets/sec target (used by 'constant'/'random' patterns).")
     udp_rate: Optional[float] = Field(None, ge=0, description="UDP packets/sec target (used by 'constant'/'random' patterns).")
@@ -318,7 +327,7 @@ def _send_loop():
         _note_pattern_transition(pattern)
 
         if not running:
-            time.sleep(0.1)
+            _stop_requested.wait(timeout=0.1)
             continue
 
         # If ramping, compute one combined-rate interval up front for this
@@ -330,7 +339,7 @@ def _send_loop():
             progress = _ramp_progress(pattern, ramp_duration)
             effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
             if effective_rate <= 0:
-                time.sleep(0.1)
+                _stop_requested.wait(timeout=0.1)
                 continue
             ramp_interval = 1.0 / effective_rate
 
@@ -340,6 +349,11 @@ def _send_loop():
         n_packets = burst_size if pattern == "periodic_burst" else 1
 
         for i in range(n_packets):
+            # Re-check running on every packet so a mid-burst /stop takes effect immediately.
+            with _lock:
+                if not state["running"]:
+                    break
+
             size, interval, proto = (
                 _normal_params() if mode == "normal" else _stealth_params()
             )
@@ -371,16 +385,21 @@ def _send_loop():
                 # Tight gap between packets within a burst; the real pause
                 # happens once after the whole burst, below.
                 if i < n_packets - 1:
-                    time.sleep(0.005)
+                    if _stop_requested.wait(timeout=0.005):
+                        break
             elif pattern == "random":
                 # Exponential inter-arrival time => Poisson process, but
                 # independent of the size mode's own interval.
-                time.sleep(np.random.exponential(interval))
+                if _stop_requested.wait(timeout=np.random.exponential(interval)):
+                    break
             else:  # "constant"
-                time.sleep(interval)
+                if _stop_requested.wait(timeout=interval):
+                    break
 
         if pattern == "periodic_burst":
-            time.sleep(burst_interval)
+            # Long idle between bursts — interruptible so /stop takes effect at once.
+            if _stop_requested.wait(timeout=burst_interval):
+                continue
 
 
 def _metrics_loop():
@@ -428,14 +447,42 @@ threading.Thread(target=_send_loop,    daemon=True).start()
 threading.Thread(target=_metrics_loop, daemon=True).start()
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _expand_rate_shorthand(updates: dict, current_tcp_ratio: int) -> dict:
+    """If the caller passed `rate` (combined shorthand), expand it into
+    `tcp_rate` and `udp_rate` using `tcp_ratio` (from updates or current state).
+    Explicit tcp_rate/udp_rate keys in `updates` still take precedence because
+    this function runs first and they overwrite the derived values in the
+    subsequent state.update() call.
+
+    This makes `{"rate": 20}` work identically to
+    `{"tcp_rate": 12, "udp_rate": 8}` at the default tcp_ratio=60.
+    """
+    if 'rate' not in updates:
+        return updates
+    updates = dict(updates)          # don't mutate the caller's dict
+    combined = updates.pop('rate')   # remove; not a state key
+    ratio = updates.get('tcp_ratio', current_tcp_ratio)
+    updates.setdefault('tcp_rate', round(combined * ratio / 100, 3))
+    updates.setdefault('udp_rate', round(combined * (100 - ratio) / 100, 3))
+    return updates
+
+
 # ── REST API ──────────────────────────────────────────────────────────────────
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")
 async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
+    updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
     with _lock:
-        state["running"] = True
-        state.update({k: v for k, v in body.model_dump(exclude_none=True).items() if k in state})
+        state["running"]      = True
+        state["packets_sent"] = 0
+        state["bytes_sent"]   = 0
+        state["errors"]       = 0
+        state.update({k: v for k, v in updates.items() if k in state})
+        _history.clear()  # inside lock: _metrics_loop() also holds _lock when appending, so no race
+    _stop_requested.clear()   # wake-up flag off → sleeps work normally again
     return {"ok": True}
 
 
@@ -443,6 +490,7 @@ async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
 async def stop():
     with _lock:
         state["running"] = False
+    _stop_requested.set()   # wake the send loop immediately so it sees running=False
     return {"ok": True}
 
 
@@ -453,8 +501,9 @@ async def stop():
                         "burst_size, burst_interval, ramp_start_rate, ramp_end_rate, "
                         "ramp_duration, fault_rate, extra_latency_ms.")
 async def config(body: GeneratorConfig = Body(...)):
+    updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
     with _lock:
-        state.update({k: v for k, v in body.model_dump(exclude_none=True).items() if k in state})
+        state.update({k: v for k, v in updates.items() if k in state})
         mode = state["mode"]
     return {"ok": True, "mode": mode}
 

@@ -96,6 +96,8 @@ state = {
 }
 
 _lock  = threading.Lock()
+# Set by /stop to wake the send loop immediately; cleared by /start so waits work normally.
+_stop_requested = threading.Event()
 _bytes_window: list[tuple[float, int]] = []  # (timestamp, bytes)
 _latency_window: list[tuple[float, float]] = []
 
@@ -263,10 +265,15 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print(f"[MQTT] Connected to broker {BROKER_HOST}:{BROKER_PORT}")
         with _lock:
+            running     = state["running"]
             topic_count = state["topic_count"]
         global _subscribed_topics
-        _subscribed_topics = set()  # broker session is fresh; re-subscribe to everything
-        _resubscribe(topic_count)
+        _subscribed_topics = set()  # broker session is fresh
+        # Only subscribe if the generator has been explicitly started.
+        # Without this guard the broker sees SUBSCRIBE traffic at container
+        # startup even though no one clicked "Start".
+        if running:
+            _resubscribe(topic_count)
     else:
         print(f"[MQTT] Connection failed rc={rc}")
 
@@ -354,7 +361,7 @@ def _send_loop():
         _note_pattern_transition(pattern)
 
         if not running:
-            time.sleep(0.1)
+            _stop_requested.wait(timeout=0.1)
             continue
 
         if pattern == "ramp":
@@ -366,7 +373,7 @@ def _send_loop():
                 effective_rate = max(rate, burst_rate)
 
         if effective_rate <= 0:
-            time.sleep(0.1)
+            _stop_requested.wait(timeout=0.1)
             continue
 
         # Hard cap: protect the Mosquitto broker from accidental overload.
@@ -390,7 +397,8 @@ def _send_loop():
             with _lock:
                 state["errors"] += 1
             _latency_window.append((time.time(), elapsed_ms))
-            time.sleep(sleep_time)
+            if _stop_requested.wait(timeout=sleep_time):
+                continue
             continue
 
         topic   = random.choice(_topic_list(topic_count))
@@ -426,7 +434,9 @@ def _send_loop():
                 state["errors"] += 1
             _latency_window.append((time.time(), elapsed_ms))
 
-        time.sleep(sleep_time)
+        # Interruptible sleep — /stop sets _stop_requested so we wake immediately.
+        if _stop_requested.wait(timeout=sleep_time):
+            continue
 
 
 def _metrics_loop():
@@ -484,11 +494,17 @@ async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
     if "qos_distribution" in updates:
         updates["qos_distribution"] = _normalize_qos_distribution(updates["qos_distribution"])
     with _lock:
-        state["running"] = True
+        state["running"]           = True
+        state["packets_sent"]      = 0
+        state["bytes_sent"]        = 0
+        state["errors"]            = 0
+        state["messages_received"] = 0
+        state["bytes_received"]    = 0
         state.update(updates)
         topic_count = state["topic_count"]
-    if "topic_count" in updates:
-        _resubscribe(topic_count)
+        _history.clear()  # inside lock: _metrics_loop() also holds _lock when appending, so no race
+    _resubscribe(topic_count)   # always subscribe/re-subscribe when started
+    _stop_requested.clear()     # wake-up flag off → sleeps work normally again
     return {"ok": True}
 
 
@@ -496,6 +512,12 @@ async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
 async def stop():
     with _lock:
         state["running"] = False
+    # Unsubscribe from all topics so the broker sees no active receivers when idle.
+    global _subscribed_topics
+    for topic in list(_subscribed_topics):
+        mqtt_client.unsubscribe(topic)
+    _subscribed_topics = set()
+    _stop_requested.set()   # wake the send loop immediately so it sees running=False
     return {"ok": True}
 
 

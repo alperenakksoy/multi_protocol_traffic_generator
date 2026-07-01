@@ -197,7 +197,8 @@ def reset():
             store["generators"][name]["bytes_sent"]   = 0
             store["generators"][name]["errors"]        = 0
         store["generators_prev"] = {}
-        store["start_time"] = time.time()
+        store["analyzers"]       = {}   # clear captured-packet totals so Analysis tab resets too
+        store["start_time"]      = time.time()
     return jsonify({"ok": True})
 
 
