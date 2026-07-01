@@ -1,5 +1,10 @@
 # Traffic Profile: HTTP/2 Dominant
 # Shows: HTTP/2 multiplexing under load, periodic bursts visible in the I/O graph
+#
+# Phase order is deliberate for the test cases in the lab report:
+#   T2 (Temporal Analysis): load this profile, start, capture 120 s immediately.
+#   http2_burst is first so burst peaks (~30 s apart, 5 s wide) are visible
+#   within that 120 s window (warmup 15 s + burst phase 120 s = 135 s total).
 
 global:
   duration: 300       # total duration 5 minutes
@@ -7,12 +12,55 @@ global:
   cooldown: 15        # 15 sec cooldown phase
 
 phases:
+  # ── Phase 1: periodic burst ── T2 target, runs at 15 s – 135 s after start ──
+  # Start a Wireshark capture immediately after `curl … /start` and capture for
+  # 120 s; you will see 3–4 burst spikes at 30 s intervals (burst_interval=30,
+  # burst_duration=5) with HTTP/2 rate jumping 8× from 50 → 400 req/s.
+  - name: http2_burst
+    duration: 120
+    adaptive_control:
+      enabled: true
+      check_interval: 5
+      scale_up_threshold:
+        error_rate_max: 0.0    # 0% errors → increase rate +20%
+        latency_max_ms: 80     # HTTP/2 heavy: allow up to 80ms before scaling up
+      scale_down_threshold:
+        error_rate_min: 0.05   # ≥5% errors → cut rate by 50%
+        latency_min_ms: 200    # HTTP/2 heavy: cut if latency exceeds 200ms
+      scale_up_factor: 1.2
+      scale_down_factor: 0.5
+      min_multiplier: 0.1
+      max_multiplier: 5.0
+    protocols:
+      http2:
+        rate: 50             # base rate
+        payload_size: 4096
+        pattern: periodic_burst
+        burst_rate: 400      # 8× during burst
+        burst_duration: 5    # 5 second burst
+        burst_interval: 30   # every 30 seconds → visible in 120 s capture
+        concurrent_streams: 10
+      quic:
+        rate: 20             # base rate
+        payload_size: 1024
+        pattern: periodic_burst
+        burst_rate: 150      # ~7.5× during burst
+        burst_duration: 5
+        burst_interval: 30
+      mqtt:
+        rate: 8
+        qos: 1
+      tcp:
+        rate: 5
+        mode: normal
+
+  # ── Phase 2: HTTP/2 baseline (dominant, constant) ─────────────────────────
   - name: http2_dominant
     duration: 60
     protocols:
       http2:
         rate: 150            # 150 requests/sec
-        payload_size: 8192   # 8KB payloads
+        payload_size: 8192   # 8 KB payloads
         method_distribution:
           GET: 60
           POST: 40
@@ -31,6 +79,7 @@ phases:
       udp:
         rate: 2
 
+  # ── Phase 3: linear ramp ("ramping" sending pattern) ──────────────────────
   - name: http2_ramp
     duration: 60
     description: >
@@ -56,44 +105,7 @@ phases:
         rate: 5
         qos: 0
 
-  - name: http2_burst
-    duration: 120
-    adaptive_control:
-      enabled: true
-      check_interval: 5
-      scale_up_threshold:
-        error_rate_max: 0.0    # 0% errors → increase rate +20%
-        latency_max_ms: 80     # HTTP/2 heavy: allow up to 80ms before scaling up
-      scale_down_threshold:
-        error_rate_min: 0.05   # ≥5% errors → cut rate by 50%
-        latency_min_ms: 200    # HTTP/2 heavy: cut if latency exceeds 200ms
-      scale_up_factor: 1.2
-      scale_down_factor: 0.5
-      min_multiplier: 0.1
-      max_multiplier: 5.0
-    protocols:
-      http2:
-        rate: 50             # base rate
-        payload_size: 4096
-        pattern: periodic_burst
-        burst_rate: 400      # 8x during burst
-        burst_duration: 5    # 5 second burst
-        burst_interval: 30   # every 30 seconds
-        concurrent_streams: 10
-      quic:
-        rate: 20             # base rate
-        payload_size: 1024
-        pattern: periodic_burst
-        burst_rate: 150      # ~7.5x during burst
-        burst_duration: 5
-        burst_interval: 30
-      mqtt:
-        rate: 8
-        qos: 1
-      tcp:
-        rate: 5
-        mode: normal
-
+  # ── Phase 4: cooldown ─────────────────────────────────────────────────────
   - name: cooldown_phase
     duration: 60
     protocols:

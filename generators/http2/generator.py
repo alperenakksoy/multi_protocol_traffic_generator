@@ -421,8 +421,12 @@ threading.Thread(target=_run_background, daemon=True).start()
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")
 async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
     with _lock:
-        state["running"] = True
+        state["running"]      = True
+        state["packets_sent"] = 0
+        state["bytes_sent"]   = 0
+        state["errors"]       = 0
         state.update({k: v for k, v in body.model_dump(exclude_none=True).items() if k in state})
+        _history.clear()  # inside lock: _metrics() also holds _lock when appending, so no race
     return {"ok": True}
 
 

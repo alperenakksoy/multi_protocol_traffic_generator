@@ -99,10 +99,11 @@ state: dict[str, Any] = {
     "active_profile":  None,
     "active_phase":    None,
     "phase_task":      None,   # background asyncio task running the phase plan
-    "adaptive_enabled": False,
-    "adaptive_task":    None,  # background asyncio task running the adaptive loop
-    "adaptive_status":  {},    # generator -> last adaptive decision
-    "ramp_status":      None,  # {"phase": "warmup"|"cooldown", "progress": 0.0-1.0} while ramping
+    "adaptive_enabled":          False,
+    "adaptive_task":             None,   # background asyncio task running the adaptive loop
+    "adaptive_status":           {},     # generator -> last adaptive decision
+    "adaptive_profile_managed":  False,  # True only when adaptive was started by the phase runner
+    "ramp_status":               None,   # {"phase": "warmup"|"cooldown", "progress": 0.0-1.0} while ramping
 }
 log_entries: list[dict] = []
 
@@ -473,7 +474,7 @@ def _start_adaptive(adaptive_cfg: dict):
         state["adaptive_task"].cancel()
     state["adaptive_enabled"] = True
     state["adaptive_status"] = {}
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     state["adaptive_task"] = loop.create_task(_adaptive_loop(adaptive_cfg))
 
 
@@ -519,7 +520,14 @@ async def _run_phases(profile_data: dict):
 
         await asyncio.sleep(phase.get("duration", 60))
 
-    _stop_adaptive()
+    # Only stop adaptive control if the profile itself started it (i.e. it was
+    # not manually enabled by the user from the dashboard). If the user toggled
+    # adaptive on, leave it running so it survives the end of the phase sequence.
+    # The profile-managed flag is set by _start_adaptive() only when the phase
+    # runner drives it; manual /adaptive toggle is tracked separately.
+    if state.get("adaptive_profile_managed"):
+        _stop_adaptive()
+        state["adaptive_profile_managed"] = False
 
     # Cooldown: linearly ramp the last phase's rates back down to 0 before stopping.
     if phases and cooldown > 0 and state["running"]:
@@ -588,7 +596,7 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
                 _log("Started", "success", source=name)
 
     # Start phase runner in background
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     state["phase_task"] = loop.create_task(_run_phases(profile_data))
 
     _log(f"Started with profile '{profile}'", "success")
@@ -678,7 +686,7 @@ async def load_config(body: ConfigLoadRequest = Body(...)):
                         _log("Restarted with new profile", "success", source=name)
 
         # Launch the new phase runner.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         state["phase_task"] = loop.create_task(_run_phases(profile_data))
 
     return {"ok": True, "profile": profile}

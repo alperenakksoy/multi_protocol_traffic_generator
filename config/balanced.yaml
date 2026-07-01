@@ -137,3 +137,5 @@ phases:
       tcp:
         rate: 15
         mode: normal
+      udp:
+        rate: 10

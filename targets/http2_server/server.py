@@ -5,14 +5,11 @@ Receives HTTP/2 requests from gen-http2.
 Served by Hypercorn which supports HTTP/2 natively.
 """
 
-import os, time, threading
-import requests as req_sync
+import threading
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 app = FastAPI()
-
-METRICS_URL = os.getenv("METRICS_URL", "http://metrics:9090")
 
 counter = {"requests": 0, "bytes_in": 0}
 _lock   = threading.Lock()
@@ -56,23 +53,3 @@ async def catch_all_post(path: str, request: Request):
         counter["requests"] += 1
         counter["bytes_in"] += len(body)
     return JSONResponse({"received": len(body), "path": f"/{path}"})
-
-
-def _report():
-    while True:
-        time.sleep(10)
-        with _lock:
-            payload = {
-                "generator":    "target-http2",
-                "running":      True,
-                "packets_sent": counter["requests"],
-                "bytes_sent":   counter["bytes_in"],
-                "errors":       0,
-            }
-        try:
-            req_sync.post(f"{METRICS_URL}/update", json=payload, timeout=2)
-        except Exception:
-            pass
-
-
-threading.Thread(target=_report, daemon=True).start()
