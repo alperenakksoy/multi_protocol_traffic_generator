@@ -1639,7 +1639,7 @@
 <script>
   const API = 'http://localhost:8000';
   let pollInterval = null;
-  let seenLogCount = 0;
+  let lastLogKey = '';
   const seenFailureKeys = new Set();
   const _toggleLock = {};
 
@@ -2227,7 +2227,9 @@
     }
 
     // profile buttons
-    ['http2_heavy','mqtt_heavy','balanced'].forEach(p => {
+    ['balanced','http2_heavy','mqtt_heavy','quic_heavy','tcpudp_heavy',
+     'burst_mode','fault_injection','adaptive_only','iot_sensor_farm',
+     'video_streaming','microservices_api','network_stress_test','smart_city'].forEach(p => {
       document.getElementById('prof-' + p).classList.toggle('active', data.active_profile === p);
     });
 
@@ -2494,9 +2496,20 @@
     renderAttacker(data);
 
     const log = data.log || [];
-    const newEntries = log.slice(seenLogCount);
-    newEntries.forEach(e => addLog(e.time, e.msg || e.message || '', e.level || 'info', e.source || 'controller'));
-    seenLogCount = log.length;
+    if (log.length > 0) {
+      let pivotIdx = -1;
+      if (lastLogKey) {
+        for (let i = log.length - 1; i >= 0; i--) {
+          if ((log[i].time + '|' + (log[i].msg || log[i].message || '')) === lastLogKey) {
+            pivotIdx = i;
+            break;
+          }
+        }
+      }
+      log.slice(pivotIdx + 1).forEach(e => addLog(e.time, e.msg || e.message || '', e.level || 'info', e.source || 'controller'));
+      const last = log[log.length - 1];
+      lastLogKey = last.time + '|' + (last.msg || last.message || '');
+    }
 
     // Refresh raw Docker logs for whichever per-container tab is active
     if (activeLogTab !== 'all') fetchRawLogs(activeLogTab);
@@ -3150,10 +3163,12 @@
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function getActiveProfile() {
-    for (const p of ['http2_heavy','mqtt_heavy','balanced']) {
+    for (const p of ['balanced','http2_heavy','mqtt_heavy','quic_heavy','tcpudp_heavy',
+                     'burst_mode','fault_injection','adaptive_only','iot_sensor_farm',
+                     'video_streaming','microservices_api','network_stress_test','smart_city']) {
       if (document.getElementById('prof-' + p).classList.contains('active')) return p;
     }
-    return 'balanced';
+    return null;
   }
 
   function showError(msg) {

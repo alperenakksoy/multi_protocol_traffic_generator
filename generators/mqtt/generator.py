@@ -503,6 +503,11 @@ async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
         state.update(updates)
         topic_count = state["topic_count"]
         _history.clear()  # inside lock: _metrics_loop() also holds _lock when appending, so no race
+    # Reconnect to the broker if we disconnected on last stop.
+    try:
+        mqtt_client.reconnect()
+    except Exception:
+        threading.Thread(target=_connect_with_retry, daemon=True).start()
     _resubscribe(topic_count)   # always subscribe/re-subscribe when started
     _stop_requested.clear()     # wake-up flag off → sleeps work normally again
     return {"ok": True}
@@ -518,6 +523,14 @@ async def stop():
         mqtt_client.unsubscribe(topic)
     _subscribed_topics = set()
     _stop_requested.set()   # wake the send loop immediately so it sees running=False
+    # Disconnect from the broker so paho-mqtt's background thread stops sending
+    # keepalive PINGREQs every 60s. Without this the analyzer sidecar sees the
+    # PINGREQ/PINGRESP exchange as a brief traffic burst and fires a false
+    # "traffic resumed → went silent" cycle every minute while the system is idle.
+    try:
+        mqtt_client.disconnect()
+    except Exception:
+        pass
     return {"ok": True}
 
 
