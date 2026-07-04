@@ -513,10 +513,21 @@ async def _run_phases(profile_data: dict):
             if cfg:
                 await _call("patch", f"{GENERATORS[name]}/config", json=cfg)
 
-        # Adaptive control is only started/stopped via the dashboard toggle.
-        # Profile phase YAML may define an adaptive_control block but it is
-        # used only when the user explicitly enables the toggle (see /adaptive).
-        pass
+        # Start/stop/reconfigure Adaptive Control based on the phase's
+        # adaptive_control block. Only act when adaptive is not already
+        # running from a manual user toggle (adaptive_enabled=True but
+        # adaptive_profile_managed=False) — in that case the user is in
+        # control and the profile should not override their settings.
+        adaptive_cfg = phase.get("adaptive_control", {})
+        if adaptive_cfg.get("enabled"):
+            if not state["adaptive_enabled"] or state["adaptive_profile_managed"]:
+                _start_adaptive(adaptive_cfg)
+                state["adaptive_profile_managed"] = True
+        elif state["adaptive_profile_managed"]:
+            # Previous phase was profile-managed but this one has no adaptive
+            # block — stop it so it doesn't bleed into phases that don't want it.
+            _stop_adaptive()
+            state["adaptive_profile_managed"] = False
 
         await asyncio.sleep(phase.get("duration", 60))
 
