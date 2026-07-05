@@ -27,8 +27,11 @@ things, as the latency signal for Adaptive Control).
 
 import os, time, asyncio, random, threading
 from typing import Optional
+from urllib.parse import urlsplit
 
-
+import h2.config
+import h2.connection
+import h2.events
 import httpx
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +48,10 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 TARGET_URL  = os.getenv("TARGET_URL",  "http://target-http2:8080")
 METRICS_URL = os.getenv("METRICS_URL", "http://metrics:9090")
 PORT        = int(os.getenv("PORT", "7001"))
+
+_target_parts = urlsplit(TARGET_URL)
+TARGET_HOST   = _target_parts.hostname or "localhost"
+TARGET_PORT   = _target_parts.port or 80
 
 state = {
     "running":            False,
@@ -217,9 +224,185 @@ class OkResponse(BaseModel):
     ok: bool = True
 
 
-# ── Traffic loop ──────────────────────────────────────────────────────────────
+# ── HTTP/2 cleartext (h2c) client ──────────────────────────────────────────────
+#
+# httpx only negotiates HTTP/2 via TLS/ALPN; against a plain http:// target it
+# silently sends HTTP/1.1 with no error. Since this generator's target has no
+# TLS, we speak h2c ourselves via the "prior knowledge" mode (send the HTTP/2
+# preface immediately, no Upgrade handshake) so real HTTP/2 frames appear on
+# the wire.
 
-async def _send_one(client: httpx.AsyncClient):
+class H2CClient:
+    """Single persistent HTTP/2 cleartext connection, multiplexing concurrent
+    request streams. Reconnects automatically if the connection drops."""
+
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._conn: Optional[h2.connection.H2Connection] = None
+        self._streams: dict[int, asyncio.Future] = {}
+        self._buffers: dict[int, bytearray] = {}
+        self._window_waiters: dict[int, list[asyncio.Future]] = {}
+        self._send_lock = asyncio.Lock()
+        self._connect_lock = asyncio.Lock()
+        self._reader_task: Optional[asyncio.Task] = None
+
+    async def _ensure_connected(self):
+        if self._writer is not None:
+            return
+        async with self._connect_lock:
+            if self._writer is not None:
+                return
+            self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+            self._conn = h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=True))
+            self._conn.initiate_connection()
+            self._writer.write(self._conn.data_to_send())
+            await self._writer.drain()
+            self._reader_task = asyncio.create_task(self._read_loop())
+
+    async def _read_loop(self):
+        reader, writer, conn = self._reader, self._writer, self._conn
+        try:
+            while True:
+                data = await reader.read(65536)
+                if not data:
+                    break
+                for event in conn.receive_data(data):
+                    self._handle_event(event)
+                out = conn.data_to_send()
+                if out:
+                    writer.write(out)
+                    await writer.drain()
+        except Exception as exc:
+            for fut in self._streams.values():
+                if not fut.done():
+                    fut.set_exception(exc)
+        finally:
+            for fut in self._streams.values():
+                if not fut.done():
+                    fut.set_exception(ConnectionError("HTTP/2 connection closed"))
+            self._streams.clear()
+            self._buffers.clear()
+            for waiters in self._window_waiters.values():
+                for wfut in waiters:
+                    if not wfut.done():
+                        wfut.set_exception(ConnectionError("HTTP/2 connection closed"))
+            self._window_waiters.clear()
+            try:
+                writer.close()
+            except Exception:
+                pass
+            if self._writer is writer:
+                self._reader = self._writer = self._conn = None
+
+    def _handle_event(self, event):
+        if isinstance(event, h2.events.ResponseReceived):
+            self._buffers[event.stream_id] = bytearray()
+        elif isinstance(event, h2.events.DataReceived):
+            self._buffers.setdefault(event.stream_id, bytearray()).extend(event.data)
+            self._conn.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
+        elif isinstance(event, h2.events.StreamEnded):
+            fut = self._streams.pop(event.stream_id, None)
+            if fut and not fut.done():
+                fut.set_result(bytes(self._buffers.pop(event.stream_id, b"")))
+        elif isinstance(event, h2.events.StreamReset):
+            fut = self._streams.pop(event.stream_id, None)
+            if fut and not fut.done():
+                fut.set_exception(ConnectionError(f"stream {event.stream_id} reset: {event.error_code}"))
+        elif isinstance(event, h2.events.WindowUpdated):
+            # stream_id 0 means the connection-level window grew, which raises
+            # the effective window for every open stream - wake all waiters.
+            if event.stream_id == 0:
+                for waiters in self._window_waiters.values():
+                    for wfut in waiters:
+                        if not wfut.done():
+                            wfut.set_result(None)
+                self._window_waiters.clear()
+            else:
+                for wfut in self._window_waiters.pop(event.stream_id, []):
+                    if not wfut.done():
+                        wfut.set_result(None)
+
+    async def _wait_for_window(self, stream_id: int):
+        fut = asyncio.get_event_loop().create_future()
+        self._window_waiters.setdefault(stream_id, []).append(fut)
+        await fut
+
+    async def request(self, method: str, path: str, body: Optional[bytes] = None) -> bytes:
+        await self._ensure_connected()
+        # Snapshot the connection/writer for this connection's lifetime: if a
+        # reconnect happens while this request is still in flight (e.g. this
+        # request outlives the connection it started on), we must keep
+        # operating on the object we opened the stream on, never on whatever
+        # self._conn/self._writer happen to point to *now* - otherwise a
+        # stream_id from the old connection gets applied to the new one's H2
+        # state machine, corrupting it for every other stream multiplexed on
+        # that new connection too.
+        conn, writer = self._conn, self._writer
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        stream_id = None
+        try:
+            async with self._send_lock:
+                stream_id = conn.get_next_available_stream_id()
+                self._streams[stream_id] = fut
+                headers = [
+                    (":method", method),
+                    (":path", path),
+                    (":scheme", "http"),
+                    (":authority", f"{self.host}:{self.port}"),
+                ]
+                conn.send_headers(stream_id, headers, end_stream=not body)
+                out = conn.data_to_send()
+                if out:
+                    writer.write(out)
+                    await writer.drain()
+
+            if body:
+                view = memoryview(body)
+                offset = 0
+                while offset < len(view):
+                    async with self._send_lock:
+                        window = conn.local_flow_control_window(stream_id)
+                        chunk_size = min(len(view) - offset, conn.max_outbound_frame_size, window)
+                        if chunk_size > 0:
+                            chunk = bytes(view[offset: offset + chunk_size])
+                            offset += chunk_size
+                            conn.send_data(stream_id, chunk, end_stream=(offset >= len(view)))
+                            out = conn.data_to_send()
+                            if out:
+                                writer.write(out)
+                                await writer.drain()
+                    if chunk_size <= 0:
+                        # No room in the flow control window yet - wait for the
+                        # server to acknowledge data and grant more, then retry.
+                        await self._wait_for_window(stream_id)
+
+            # Wrapped in the same try/except as the send path: if this stream
+            # never gets a response (times out), it must still be reset below,
+            # otherwise it stays "open" forever in this connection's H2 state
+            # (never sent RST_STREAM) and repeated timeouts eventually exhaust
+            # max_concurrent_streams and force a reconnect.
+            return await asyncio.wait_for(fut, timeout=5.0)
+        except Exception:
+            if stream_id is not None:
+                async with self._send_lock:
+                    try:
+                        conn.reset_stream(stream_id)
+                        out = conn.data_to_send()
+                        if out:
+                            writer.write(out)
+                            await writer.drain()
+                    except Exception:
+                        pass
+                self._streams.pop(stream_id, None)
+                self._window_waiters.pop(stream_id, None)
+            raise
+
+
+async def _send_one(client: H2CClient):
     with _lock:
         use_get       = random.randint(1, 100) <= state["method_get_pct"]
         payload_size  = state["payload_size"]
@@ -244,12 +427,12 @@ async def _send_one(client: httpx.AsyncClient):
     try:
         if use_get:
             path = random.choice(get_paths)
-            r = await client.get(f"{TARGET_URL}{path}", timeout=5.0)
-            n = len(r.content)
+            body = await client.request("GET", path)
+            n = len(body)
         else:
             path = random.choice(post_paths)
             payload = os.urandom(payload_size)
-            r = await client.post(f"{TARGET_URL}{path}", content=payload, timeout=5.0)
+            await client.request("POST", path, body=payload)
             n = payload_size
 
         elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -318,49 +501,49 @@ def _ramp_effective_rate(ramp_start_rate: float, ramp_end_rate: float, progress:
 
 
 async def _generate():
-    # httpx HTTP/2 client: keeps one TCP connection, multiplexes streams
-    async with httpx.AsyncClient(http2=True, verify=False) as client:
-        while True:
-            with _lock:
-                running        = state["running"]
-                rate           = state["rate"]
-                streams        = state["concurrent_streams"]
-                pattern        = state["pattern"]
-                burst_rate     = state["burst_rate"]
-                burst_duration = state["burst_duration"]
-                burst_interval = state["burst_interval"]
-                ramp_start     = state["ramp_start_rate"]
-                ramp_end       = state["ramp_end_rate"]
-                ramp_duration  = state["ramp_duration"]
+    # h2c client: keeps one TCP connection, multiplexes streams
+    client = H2CClient(TARGET_HOST, TARGET_PORT)
+    while True:
+        with _lock:
+            running        = state["running"]
+            rate           = state["rate"]
+            streams        = state["concurrent_streams"]
+            pattern        = state["pattern"]
+            burst_rate     = state["burst_rate"]
+            burst_duration = state["burst_duration"]
+            burst_interval = state["burst_interval"]
+            ramp_start     = state["ramp_start_rate"]
+            ramp_end       = state["ramp_end_rate"]
+            ramp_duration  = state["ramp_duration"]
 
-            _note_pattern_transition(pattern)
+        _note_pattern_transition(pattern)
 
-            if not running:
-                await asyncio.sleep(0.1)
-                continue
+        if not running:
+            await asyncio.sleep(0.1)
+            continue
 
-            if pattern == "ramp":
-                progress = _ramp_progress(pattern, ramp_duration)
-                effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
-            else:
-                effective_rate = rate
-                if _is_burst_active(pattern, burst_duration, burst_interval):
-                    effective_rate = max(rate, burst_rate)
+        if pattern == "ramp":
+            progress = _ramp_progress(pattern, ramp_duration)
+            effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
+        else:
+            effective_rate = rate
+            if _is_burst_active(pattern, burst_duration, burst_interval):
+                effective_rate = max(rate, burst_rate)
 
-            if effective_rate <= 0:
-                await asyncio.sleep(0.1)
-                continue
+        if effective_rate <= 0:
+            await asyncio.sleep(0.1)
+            continue
 
-            # Fire `streams` concurrent requests, then wait for the right interval
-            tasks = [_send_one(client) for _ in range(streams)]
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # Fire `streams` concurrent requests, then wait for the right interval
+        tasks = [_send_one(client) for _ in range(streams)]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-            interval = streams / effective_rate
-            if pattern == "random":
-                # Exponential inter-arrival time => Poisson process, same mean rate.
-                await asyncio.sleep(random.expovariate(1.0 / interval))
-            else:
-                await asyncio.sleep(interval)
+        interval = streams / effective_rate
+        if pattern == "random":
+            # Exponential inter-arrival time => Poisson process, same mean rate.
+            await asyncio.sleep(random.expovariate(1.0 / interval))
+        else:
+            await asyncio.sleep(interval)
 
 
 async def _metrics():
