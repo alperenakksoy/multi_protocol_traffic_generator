@@ -321,9 +321,10 @@ def _phase_to_gen_configs(phase: dict) -> dict[str, dict]:
         "gen-quic":   {k: v for k, v in p.get("quic",  {}).items()},
         "gen-mqtt":   _translate_mqtt(p.get("mqtt", {})),
         "gen-tcpudp": {
-            "tcp_rate":    p.get("tcp", {}).get("rate", 0),
-            "udp_rate":    p.get("udp", {}).get("rate", 0),
-            "packet_size": p.get("tcp", {}).get("packet_size", 512),
+            "tcp_rate":        p.get("tcp", {}).get("rate", 0),
+            "udp_rate":        p.get("udp", {}).get("rate", 0),
+            "tcp_packet_size": p.get("tcp", {}).get("packet_size", 512),
+            "udp_packet_size": p.get("udp", {}).get("packet_size", 512),
             # Forward the rest of the tcpudp block as-is: mode, mean_interval,
             # min_size, max_size, tcp_ratio, pattern, burst_size, burst_interval,
             # ramp_start_rate, ramp_end_rate, ramp_duration.

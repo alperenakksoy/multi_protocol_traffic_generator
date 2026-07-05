@@ -57,7 +57,8 @@ state = {
     "mode":         "normal",   # "normal" | "stealth"
     "tcp_rate":     10,         # TCP packets/sec (normal mode)
     "udp_rate":     5,          # UDP packets/sec (normal mode)
-    "packet_size":  512,        # bytes (normal mode, fixed)
+    "tcp_packet_size": 512,     # bytes (normal mode, fixed) - TCP packets
+    "udp_packet_size": 512,     # bytes (normal mode, fixed) - UDP packets
     "mean_interval":0.100,      # seconds (stealth mode Poisson mean)
     "min_size":     64,         # bytes (stealth mode)
     "max_size":     1400,       # bytes (stealth mode)
@@ -126,7 +127,13 @@ class GeneratorConfig(BaseModel):
     )
     tcp_rate: Optional[float] = Field(None, ge=0, description="TCP packets/sec target (used by 'constant'/'random' patterns).")
     udp_rate: Optional[float] = Field(None, ge=0, description="UDP packets/sec target (used by 'constant'/'random' patterns).")
-    packet_size: Optional[int] = Field(None, ge=0, description="Fixed packet size (bytes) in 'normal' mode.")
+    tcp_packet_size: Optional[int] = Field(None, ge=0, description="Fixed TCP packet size (bytes) in 'normal' mode.")
+    udp_packet_size: Optional[int] = Field(None, ge=0, description="Fixed UDP packet size (bytes) in 'normal' mode.")
+    packet_size: Optional[int] = Field(
+        None, ge=0,
+        description="Deprecated shorthand: sets both tcp_packet_size and udp_packet_size to the "
+                     "same value. Ignored if tcp_packet_size/udp_packet_size are also provided."
+    )
     mean_interval: Optional[float] = None
     min_size: Optional[int] = Field(None, ge=0, description="Minimum packet size (bytes) in 'stealth' mode.")
     max_size: Optional[int] = Field(None, ge=0, description="Maximum packet size (bytes) in 'stealth' mode.")
@@ -171,7 +178,8 @@ class StatusResponse(BaseModel):
     pattern: str
     tcp_rate: float
     udp_rate: float
-    packet_size: int
+    tcp_packet_size: int
+    udp_packet_size: int
     mean_interval: float
     min_size: int
     max_size: int
@@ -209,12 +217,14 @@ class OkResponse(BaseModel):
 def _normal_params() -> tuple[int, float, str]:
     """Fixed size and fixed interval; leaves a clear Wireshark fingerprint."""
     with _lock:
-        size     = state["packet_size"]
+        tcp_size = state["tcp_packet_size"]
+        udp_size = state["udp_packet_size"]
         tcp_rate = state["tcp_rate"]
         udp_rate = state["udp_rate"]
         tcp_pct  = state["tcp_ratio"]
 
     proto    = "tcp" if random.randint(1, 100) <= tcp_pct else "udp"
+    size     = tcp_size if proto == "tcp" else udp_size
     rate     = tcp_rate if proto == "tcp" else udp_rate
     interval = 1.0 / rate if rate > 0 else 0.5
     return size, interval, proto
@@ -469,12 +479,26 @@ def _expand_rate_shorthand(updates: dict, current_tcp_ratio: int) -> dict:
     return updates
 
 
+def _expand_packet_size_shorthand(updates: dict) -> dict:
+    """If the caller passed the deprecated combined `packet_size`, expand it into
+    `tcp_packet_size` and `udp_packet_size` - unless those were also provided
+    explicitly, in which case the explicit values win."""
+    if 'packet_size' not in updates:
+        return updates
+    updates = dict(updates)              # don't mutate the caller's dict
+    size = updates.pop('packet_size')    # remove; not a state key
+    updates.setdefault('tcp_packet_size', size)
+    updates.setdefault('udp_packet_size', size)
+    return updates
+
+
 # ── REST API ──────────────────────────────────────────────────────────────────
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")
 async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
     updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
+    updates = _expand_packet_size_shorthand(updates)
     with _lock:
         state["running"]      = True
         state["packets_sent"] = 0
@@ -497,11 +521,13 @@ async def stop():
 @app.patch("/config", response_model=OkResponse, summary="Update configuration at runtime",
            description="Updates any subset of: mode ('normal'|'stealth'), pattern "
                         "('constant'|'periodic_burst'|'random'|'ramp'), tcp_rate, udp_rate, "
-                        "packet_size, mean_interval, min_size, max_size, tcp_ratio, "
+                        "tcp_packet_size, udp_packet_size (or the deprecated combined "
+                        "packet_size), mean_interval, min_size, max_size, tcp_ratio, "
                         "burst_size, burst_interval, ramp_start_rate, ramp_end_rate, "
                         "ramp_duration, fault_rate, extra_latency_ms.")
 async def config(body: GeneratorConfig = Body(...)):
     updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
+    updates = _expand_packet_size_shorthand(updates)
     with _lock:
         state.update({k: v for k, v in updates.items() if k in state})
         mode = state["mode"]
