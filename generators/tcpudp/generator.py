@@ -89,6 +89,18 @@ _latency_window: list[tuple[float, float]] = []
 _ramp_started_at: Optional[float] = None
 _last_pattern: Optional[str] = None
 
+# Next wall-clock time each protocol is due to send, for pattern='constant'/
+# 'random'. TCP and UDP are paced fully independently here, each strictly at
+# its own configured tcp_rate/udp_rate - unlike periodic_burst/ramp, which
+# intentionally use tcp_ratio to split a single combined rate (see their
+# docstrings), 'constant'/'random' must NOT pick a protocol via a tcp_ratio
+# coin-flip: that decouples the chosen protocol's actual send frequency from
+# its own tcp_rate/udp_rate value entirely (e.g. tcp_rate=5/udp_rate=150 would
+# still send TCP 60% of the time by default tcp_ratio, producing a TCP:UDP
+# packet ratio dominated by the fixed 60/40 split rather than the configured
+# 5:150 rates).
+_next_due: dict[str, float] = {"tcp": 0.0, "udp": 0.0}
+
 # Ring buffer of recent metric snapshots (one per _metrics_loop() tick, ~5s apart),
 # capped to the last 5 minutes. Exposed via /status so the dashboard can draw
 # live rate/latency/error sparklines without polling a separate endpoint.
@@ -300,12 +312,17 @@ def _ramp_progress(pattern: str, ramp_duration: float) -> float:
 
 
 def _note_pattern_transition(pattern: str):
-    """Resets the ramp anchor whenever `pattern` transitions into 'ramp'."""
+    """Resets the ramp anchor whenever `pattern` transitions into 'ramp'; resets
+    the independent TCP/UDP due-time schedule whenever `pattern` transitions
+    into 'constant'/'random' from something else, so a stale due-time left
+    over from periodic_burst/ramp doesn't delay or burst the first packet."""
     global _last_pattern, _ramp_started_at
     if pattern == "ramp" and _last_pattern != "ramp":
         _ramp_started_at = time.time()
     elif pattern != "ramp":
         _ramp_started_at = None
+    if pattern in ("constant", "random") and _last_pattern not in ("constant", "random"):
+        _next_due["tcp"] = _next_due["udp"] = 0.0
     _last_pattern = pattern
 
 
@@ -320,19 +337,51 @@ def _ramp_effective_rate(ramp_start_rate: float, ramp_end_rate: float, progress:
 
 # ── Traffic loop ──────────────────────────────────────────────────────────────
 
+def _send_packet(proto: str, size: int, fault_rate: float, extra_latency: float):
+    """Sends one packet of the given protocol (or simulates an injected fault),
+    updating error/latency bookkeeping. Shared by the independent constant/
+    random scheduler and the periodic_burst/ramp packet loop below."""
+    t0 = time.perf_counter()
+
+    if extra_latency > 0:
+        time.sleep(extra_latency / 1000)
+
+    if fault_rate > 0 and random.random() < fault_rate:
+        # Injected fault: simulate a failed send without touching the socket.
+        # Measured (not just the raw extra_latency config value) for
+        # consistency with the other generators and with the real-failure
+        # path in _send_tcp below.
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        with _lock:
+            state["errors"] += 1
+        _latency_window.append((time.time(), elapsed_ms))
+    else:
+        payload = os.urandom(size)
+        if proto == "tcp":
+            _send_tcp(payload)
+        else:
+            _send_udp(payload)
+
+
 def _send_loop():
     while True:
         with _lock:
-            running        = state["running"]
-            mode           = state["mode"]
-            pattern        = state["pattern"]
-            fault_rate     = state["fault_rate"]
-            extra_latency  = state["extra_latency_ms"]
-            burst_size     = max(1, state["burst_size"])
-            burst_interval = max(0.0, state["burst_interval"])
-            ramp_start     = state["ramp_start_rate"]
-            ramp_end       = state["ramp_end_rate"]
-            ramp_duration  = state["ramp_duration"]
+            running         = state["running"]
+            mode            = state["mode"]
+            pattern         = state["pattern"]
+            fault_rate      = state["fault_rate"]
+            extra_latency   = state["extra_latency_ms"]
+            burst_size      = max(1, state["burst_size"])
+            burst_interval  = max(0.0, state["burst_interval"])
+            ramp_start      = state["ramp_start_rate"]
+            ramp_end        = state["ramp_end_rate"]
+            ramp_duration   = state["ramp_duration"]
+            tcp_rate        = state["tcp_rate"]
+            udp_rate        = state["udp_rate"]
+            tcp_packet_size = state["tcp_packet_size"]
+            udp_packet_size = state["udp_packet_size"]
+            min_size        = state["min_size"]
+            max_size        = state["max_size"]
 
         _note_pattern_transition(pattern)
 
@@ -340,10 +389,36 @@ def _send_loop():
             _stop_requested.wait(timeout=0.1)
             continue
 
-        # If ramping, compute one combined-rate interval up front for this
-        # iteration's packet(s); _normal_params/_stealth_params still supply
-        # packet size and TCP/UDP protocol choice (via tcp_ratio), but their
-        # own rate-derived interval is overridden below when pattern='ramp'.
+        if pattern in ("constant", "random"):
+            # TCP and UDP are paced fully independently here, each strictly at
+            # its own tcp_rate/udp_rate - see _next_due's docstring for why
+            # this must not go through the tcp_ratio coin-flip that
+            # _normal_params/_stealth_params use below for periodic_burst/ramp.
+            now = time.time()
+            if _next_due["tcp"] > now and _next_due["udp"] > now:
+                wait = min(_next_due["tcp"], _next_due["udp"]) - now
+                _stop_requested.wait(timeout=wait)
+                continue
+
+            proto = "tcp" if _next_due["tcp"] <= _next_due["udp"] else "udp"
+            rate  = tcp_rate if proto == "tcp" else udp_rate
+            size  = (
+                (tcp_packet_size if proto == "tcp" else udp_packet_size) if mode == "normal"
+                else random.randint(min_size, max_size)
+            )
+
+            interval = 1.0 / rate if rate > 0 else 1.0
+            if pattern == "random":
+                # Exponential inter-arrival time => Poisson process, same mean rate.
+                interval = np.random.exponential(interval)
+            _next_due[proto] = time.time() + interval
+
+            _send_packet(proto, size, fault_rate, extra_latency)
+            continue
+
+        # periodic_burst / ramp: protocol choice here intentionally still comes
+        # from tcp_ratio, splitting a single combined rate (see
+        # _ramp_effective_rate's docstring) - constant/random are handled above.
         ramp_interval = None
         if pattern == "ramp":
             progress = _ramp_progress(pattern, ramp_duration)
@@ -353,9 +428,6 @@ def _send_loop():
                 continue
             ramp_interval = 1.0 / effective_rate
 
-        # `pattern` controls the overall sending cadence; `mode` (handled inside
-        # _normal_params/_stealth_params) independently controls packet size and
-        # the base interval derived from tcp_rate/udp_rate.
         n_packets = burst_size if pattern == "periodic_burst" else 1
 
         for i in range(n_packets):
@@ -370,26 +442,7 @@ def _send_loop():
             if ramp_interval is not None:
                 interval = ramp_interval
 
-            t0 = time.perf_counter()
-
-            if extra_latency > 0:
-                time.sleep(extra_latency / 1000)
-
-            if fault_rate > 0 and random.random() < fault_rate:
-                # Injected fault: simulate a failed send without touching the socket.
-                # Measured (not just the raw extra_latency config value) for
-                # consistency with the other generators and with the real-failure
-                # path in _send_tcp below.
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-                with _lock:
-                    state["errors"] += 1
-                _latency_window.append((time.time(), elapsed_ms))
-            else:
-                payload = os.urandom(size)
-                if proto == "tcp":
-                    _send_tcp(payload)
-                else:
-                    _send_udp(payload)
+            _send_packet(proto, size, fault_rate, extra_latency)
 
             if pattern == "periodic_burst":
                 # Tight gap between packets within a burst; the real pause
@@ -397,12 +450,7 @@ def _send_loop():
                 if i < n_packets - 1:
                     if _stop_requested.wait(timeout=0.005):
                         break
-            elif pattern == "random":
-                # Exponential inter-arrival time => Poisson process, but
-                # independent of the size mode's own interval.
-                if _stop_requested.wait(timeout=np.random.exponential(interval)):
-                    break
-            else:  # "constant"
+            else:  # "ramp"
                 if _stop_requested.wait(timeout=interval):
                     break
 

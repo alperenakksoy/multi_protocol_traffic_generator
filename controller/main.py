@@ -103,6 +103,7 @@ state: dict[str, Any] = {
     "adaptive_task":             None,   # background asyncio task running the adaptive loop
     "adaptive_status":           {},     # generator -> last adaptive decision
     "adaptive_profile_managed":  False,  # True only when adaptive was started by the phase runner
+    "started_generators":        set(),  # names actually POSTed /start this run (see _run_phases)
     "ramp_status":               None,   # {"phase": "warmup"|"cooldown", "progress": 0.0-1.0} while ramping
 }
 log_entries: list[dict] = []
@@ -511,7 +512,22 @@ async def _run_phases(profile_data: dict):
 
         configs = _phase_to_gen_configs(phase)
         for name, cfg in configs.items():
-            if cfg:
+            if not cfg:
+                continue
+            # A generator absent from every earlier phase (e.g. mqtt only
+            # appearing in a later phase of tcpudp_heavy.yaml) never got a
+            # POST /start, so PATCH /config here would silently update its
+            # rate/etc. while it's still not running (PATCH never touches
+            # `running`, only /start does) - lazily /start it the first time
+            # it shows up with a non-empty config instead of PATCHing.
+            if name not in state["started_generators"]:
+                result = await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                state["started_generators"].add(name)
+                if "error" in result:
+                    _log(f"Unreachable at start: {result['error']}", "error", source=name)
+                else:
+                    _log("Started", "success", source=name)
+            else:
                 await _call("patch", f"{GENERATORS[name]}/config", json=cfg)
 
         # Start/stop/reconfigure Adaptive Control based on the phase's
@@ -578,6 +594,7 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
 
     state["running"]        = True
     state["active_profile"] = profile
+    state["started_generators"] = set()
 
     # Send first phase config to all generators, then start them
     phases = profile_data.get("phases", [])
@@ -595,6 +612,7 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
         for name, cfg in start_configs.items():
             if cfg:
                 result = await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                state["started_generators"].add(name)
                 if "error" in result:
                     _log(f"Unreachable at start: {result['error']}", "error", source=name)
                 else:
@@ -602,6 +620,7 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
     else:
         for name, url in GENERATORS.items():
             result = await _call("post", f"{url}/start", json={})
+            state["started_generators"].add(name)
             if "error" in result:
                 _log(f"Unreachable at start: {result['error']}", "error", source=name)
             else:
@@ -625,6 +644,7 @@ async def start(profile: str = Query("balanced", description="Name of the YAML p
 )
 async def stop():
     state["running"] = False
+    state["started_generators"] = set()
     if state["phase_task"]:
         state["phase_task"].cancel()
         state["phase_task"] = None
@@ -687,11 +707,16 @@ async def load_config(body: ConfigLoadRequest = Body(...)):
             # counters, latency windows, etc.) so the new profile starts fresh.
             for name, url in GENERATORS.items():
                 await _call("post", f"{url}/stop")
+            state["started_generators"] = set()
 
-            # Then restart with the new profile's phase-1 config.
+            # Then restart with the new profile's phase-1 config. Generators
+            # absent from phase 1 stay stopped here; _run_phases lazily
+            # /starts them the first time they appear with a non-empty config
+            # in a later phase (see its loop below).
             for name, cfg in start_configs.items():
                 if cfg:
                     result = await _call("post", f"{GENERATORS[name]}/start", json=cfg)
+                    state["started_generators"].add(name)
                     if "error" in result:
                         _log(f"Unreachable: {result['error']}", "error", source=name)
                     else:
