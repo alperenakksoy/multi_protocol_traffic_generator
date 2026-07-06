@@ -33,7 +33,7 @@ this generator at runtime and read its live statistics (including TCP connect
 latency, used as a signal for Adaptive Control).
 """
 
-import os, time, socket, random, threading
+import os, time, socket, random, threading, traceback
 from typing import Optional
 
 import numpy as np
@@ -291,6 +291,32 @@ def _stealth_params() -> tuple[int, float, str]:
     return size, interval, proto
 
 
+_consecutive_send_failures = 0
+_FAILURE_LOG_EVERY_N = 20  # log the currently-resolved target IP every Nth
+                           # consecutive failure, to catch a stale-DNS scenario
+
+
+def _note_send_result(success: bool):
+    """Tracks consecutive failures across both _send_tcp/_send_udp; every Nth
+    consecutive failure, logs what TARGET_HOST currently resolves to. Neither
+    socket.connect() nor socket.sendto() cache resolution themselves - each
+    call re-resolves the hostname fresh - so this should always show a fresh
+    IP once Docker recreates the target container; if it ever doesn't, this
+    log line is what would catch that."""
+    global _consecutive_send_failures
+    if success:
+        _consecutive_send_failures = 0
+        return
+    _consecutive_send_failures += 1
+    if _consecutive_send_failures % _FAILURE_LOG_EVERY_N == 0:
+        try:
+            resolved_ip = socket.gethostbyname(TARGET_HOST)
+        except Exception as exc:
+            resolved_ip = f"<resolution failed: {exc!r}>"
+        print(f"[gen-tcpudp] {_consecutive_send_failures} consecutive send failures; "
+              f"{TARGET_HOST} currently resolves to {resolved_ip}", flush=True)
+
+
 def _send_tcp(data: bytes):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(2.0)
@@ -304,6 +330,7 @@ def _send_tcp(data: bytes):
             state["bytes_sent"]   += len(data)
         _bytes_window.append((time.time(), len(data)))
         _latency_window.append((time.time(), elapsed_ms))
+        _note_send_result(True)
     except Exception:
         # Real failure (refused/timed out after up to 2s, see settimeout above) -
         # record how long it actually took, so latency_ms reflects genuine
@@ -312,6 +339,7 @@ def _send_tcp(data: bytes):
         with _lock:
             state["errors"] += 1
         _latency_window.append((time.time(), elapsed_ms))
+        _note_send_result(False)
     finally:
         s.close()
 
@@ -324,9 +352,11 @@ def _send_udp(data: bytes):
             state["packets_sent"] += 1
             state["bytes_sent"]   += len(data)
         _bytes_window.append((time.time(), len(data)))
+        _note_send_result(True)
     except Exception:
         with _lock:
             state["errors"] += 1
+        _note_send_result(False)
     finally:
         s.close()
 
@@ -411,91 +441,114 @@ def _send_packet(proto: str, size: int, fault_rate: float, extra_latency: float)
             _send_udp(payload)
 
 
+def _send_loop_iteration():
+    """Runs exactly one iteration's worth of work (one scheduling decision and
+    at most one packet send). Split out from _send_loop() so the outer loop
+    can wrap a single call in try/except: every `continue` below became a
+    `return` (equivalent - "skip to the next while-loop pass") so the two are
+    behaviorally identical, but now any unexpected exception here (a bad
+    config field, a stats/np call, anything other than the socket I/O already
+    guarded inside _send_tcp/_send_udp/_send_packet) can be caught by the
+    caller instead of silently killing this daemon thread forever."""
+    with _lock:
+        running         = state["running"]
+        mode            = state["mode"]
+        pattern         = state["pattern"]
+        fault_rate      = state["fault_rate"]
+        extra_latency   = state["extra_latency_ms"]
+        tcp_burst_rate  = state["tcp_burst_rate"]
+        udp_burst_rate  = state["udp_burst_rate"]
+        burst_duration  = max(0.0, state["burst_duration"])
+        burst_interval  = max(0.0, state["burst_interval"])
+        ramp_start      = state["ramp_start_rate"]
+        ramp_end        = state["ramp_end_rate"]
+        ramp_duration   = state["ramp_duration"]
+        tcp_rate        = state["tcp_rate"]
+        udp_rate        = state["udp_rate"]
+        tcp_packet_size = state["tcp_packet_size"]
+        udp_packet_size = state["udp_packet_size"]
+        min_size        = state["min_size"]
+        max_size        = state["max_size"]
+
+    _note_pattern_transition(pattern)
+
+    if not running:
+        _stop_requested.wait(timeout=0.1)
+        return
+
+    if pattern in _INDEPENDENT_SCHEDULE_PATTERNS:
+        # TCP and UDP are paced fully independently here, each strictly at
+        # its own tcp_rate/udp_rate (elevated to burst_rate during a burst
+        # window, for periodic_burst) - see _next_due's docstring for why
+        # this must not go through the tcp_ratio coin-flip that
+        # _normal_params/_stealth_params use below for 'ramp'.
+        now = time.time()
+        if _next_due["tcp"] > now and _next_due["udp"] > now:
+            wait = min(_next_due["tcp"], _next_due["udp"]) - now
+            _stop_requested.wait(timeout=wait)
+            return
+
+        proto = "tcp" if _next_due["tcp"] <= _next_due["udp"] else "udp"
+        rate  = tcp_rate if proto == "tcp" else udp_rate
+        # A protocol with rate=0 (intentionally silent) or burst_rate=0
+        # (never configured to burst - the default, so a protocol this
+        # profile phase doesn't mention stays untouched) never gets
+        # pulled up during a burst window. TCP and UDP have independent
+        # burst rates (matching tcp_packet_size/udp_packet_size) since
+        # profiles can burst only one protocol (tcpudp_heavy.yaml's
+        # tcp_burst phase) or both at different rates (burst_mode.yaml).
+        burst_rate = tcp_burst_rate if proto == "tcp" else udp_burst_rate
+        if (pattern == "periodic_burst" and rate > 0 and burst_rate > 0
+                and _is_burst_active(burst_duration, burst_interval)):
+            rate = max(rate, burst_rate)
+        size  = (
+            (tcp_packet_size if proto == "tcp" else udp_packet_size) if mode == "normal"
+            else random.randint(min_size, max_size)
+        )
+
+        interval = 1.0 / rate if rate > 0 else 1.0
+        if pattern == "random":
+            # Exponential inter-arrival time => Poisson process, same mean rate.
+            interval = np.random.exponential(interval)
+        _next_due[proto] = time.time() + interval
+
+        _send_packet(proto, size, fault_rate, extra_latency)
+        return
+
+    # ramp: protocol choice here intentionally still comes from tcp_ratio,
+    # splitting a single combined rate (see _ramp_effective_rate's
+    # docstring) - constant/random/periodic_burst are handled above.
+    progress = _ramp_progress(pattern, ramp_duration)
+    effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
+    if effective_rate <= 0:
+        _stop_requested.wait(timeout=0.1)
+        return
+    ramp_interval = 1.0 / effective_rate
+
+    with _lock:
+        if not state["running"]:
+            return
+
+    size, _, proto = _normal_params() if mode == "normal" else _stealth_params()
+    _send_packet(proto, size, fault_rate, extra_latency)
+    _stop_requested.wait(timeout=ramp_interval)
+
+
 def _send_loop():
     while True:
-        with _lock:
-            running         = state["running"]
-            mode            = state["mode"]
-            pattern         = state["pattern"]
-            fault_rate      = state["fault_rate"]
-            extra_latency   = state["extra_latency_ms"]
-            tcp_burst_rate  = state["tcp_burst_rate"]
-            udp_burst_rate  = state["udp_burst_rate"]
-            burst_duration  = max(0.0, state["burst_duration"])
-            burst_interval  = max(0.0, state["burst_interval"])
-            ramp_start      = state["ramp_start_rate"]
-            ramp_end        = state["ramp_end_rate"]
-            ramp_duration   = state["ramp_duration"]
-            tcp_rate        = state["tcp_rate"]
-            udp_rate        = state["udp_rate"]
-            tcp_packet_size = state["tcp_packet_size"]
-            udp_packet_size = state["udp_packet_size"]
-            min_size        = state["min_size"]
-            max_size        = state["max_size"]
-
-        _note_pattern_transition(pattern)
-
-        if not running:
-            _stop_requested.wait(timeout=0.1)
-            continue
-
-        if pattern in _INDEPENDENT_SCHEDULE_PATTERNS:
-            # TCP and UDP are paced fully independently here, each strictly at
-            # its own tcp_rate/udp_rate (elevated to burst_rate during a burst
-            # window, for periodic_burst) - see _next_due's docstring for why
-            # this must not go through the tcp_ratio coin-flip that
-            # _normal_params/_stealth_params use below for 'ramp'.
-            now = time.time()
-            if _next_due["tcp"] > now and _next_due["udp"] > now:
-                wait = min(_next_due["tcp"], _next_due["udp"]) - now
-                _stop_requested.wait(timeout=wait)
-                continue
-
-            proto = "tcp" if _next_due["tcp"] <= _next_due["udp"] else "udp"
-            rate  = tcp_rate if proto == "tcp" else udp_rate
-            # A protocol with rate=0 (intentionally silent) or burst_rate=0
-            # (never configured to burst - the default, so a protocol this
-            # profile phase doesn't mention stays untouched) never gets
-            # pulled up during a burst window. TCP and UDP have independent
-            # burst rates (matching tcp_packet_size/udp_packet_size) since
-            # profiles can burst only one protocol (tcpudp_heavy.yaml's
-            # tcp_burst phase) or both at different rates (burst_mode.yaml).
-            burst_rate = tcp_burst_rate if proto == "tcp" else udp_burst_rate
-            if (pattern == "periodic_burst" and rate > 0 and burst_rate > 0
-                    and _is_burst_active(burst_duration, burst_interval)):
-                rate = max(rate, burst_rate)
-            size  = (
-                (tcp_packet_size if proto == "tcp" else udp_packet_size) if mode == "normal"
-                else random.randint(min_size, max_size)
-            )
-
-            interval = 1.0 / rate if rate > 0 else 1.0
-            if pattern == "random":
-                # Exponential inter-arrival time => Poisson process, same mean rate.
-                interval = np.random.exponential(interval)
-            _next_due[proto] = time.time() + interval
-
-            _send_packet(proto, size, fault_rate, extra_latency)
-            continue
-
-        # ramp: protocol choice here intentionally still comes from tcp_ratio,
-        # splitting a single combined rate (see _ramp_effective_rate's
-        # docstring) - constant/random/periodic_burst are handled above.
-        progress = _ramp_progress(pattern, ramp_duration)
-        effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
-        if effective_rate <= 0:
-            _stop_requested.wait(timeout=0.1)
-            continue
-        ramp_interval = 1.0 / effective_rate
-
-        with _lock:
-            if not state["running"]:
-                continue
-
-        size, _, proto = _normal_params() if mode == "normal" else _stealth_params()
-        _send_packet(proto, size, fault_rate, extra_latency)
-        if _stop_requested.wait(timeout=ramp_interval):
-            continue
+        try:
+            _send_loop_iteration()
+        except Exception as exc:
+            # Without this, ANY unexpected exception here (a bad config
+            # field, a stats/np call, anything other than the socket I/O
+            # already guarded inside _send_tcp/_send_udp) would silently
+            # kill this daemon thread forever: traffic would go quiet
+            # permanently, with nothing in `docker logs` to explain why, and
+            # no restart of the *target* container could ever bring it back
+            # since the thread sending to it would simply no longer exist.
+            print(f"[gen-tcpudp] _send_loop iteration crashed, continuing: {exc!r}", flush=True)
+            traceback.print_exc()
+            time.sleep(0.1)
 
 
 def _metrics_loop():
