@@ -15,8 +15,12 @@ Independently of `mode`, a `pattern` controls the overall sending cadence
 (temporal shape of the traffic, relevant for the Temporal Analysis task):
 
   constant       -> one packet per interval, interval derived from tcp_rate/udp_rate
-  periodic_burst -> sends `burst_size` packets back-to-back, then idles for
-                     `burst_interval` seconds, repeating periodically
+  periodic_burst -> each protocol's effective rate becomes max(its own rate,
+                     `burst_rate`) for `burst_duration` seconds every
+                     `burst_interval` seconds, stateless/clock-derived (wall
+                     time modulo burst_interval) exactly like the HTTP/2
+                     generator's burst pattern - survives restarts/event-loop
+                     delays without drifting, unlike a running-counter timer
   random         -> exponentially-distributed (Poisson) gaps between sends
   ramp           -> total packet rate increases linearly from `ramp_start_rate`
                      to `ramp_end_rate` (packets/sec, combined TCP+UDP) over
@@ -64,8 +68,11 @@ state = {
     "max_size":     1400,       # bytes (stealth mode)
     "tcp_ratio":    60,         # % TCP, rest UDP
     "pattern":      "constant", # "constant" | "periodic_burst" | "random" | "ramp"
-    "burst_size":     10,       # packets per burst (periodic_burst)
-    "burst_interval": 1.0,      # seconds to idle between bursts (periodic_burst)
+    "tcp_burst_rate": 0,        # TCP packets/sec during a burst window (periodic_burst); 0 = TCP never bursts
+    "udp_burst_rate": 0,        # UDP packets/sec during a burst window (periodic_burst); 0 = UDP never bursts
+    "burst_duration": 5.0,      # seconds: length of each burst window (periodic_burst)
+    "burst_interval": 30.0,     # seconds: period between the start of consecutive burst windows (periodic_burst)
+    "burst_size":     10,       # deprecated/unused by periodic_burst now; kept for API backward-compat
     "ramp_start_rate":  0,      # combined TCP+UDP packets/sec at the start of a 'ramp' pattern
     "ramp_end_rate":    50,     # combined TCP+UDP packets/sec at the end of a 'ramp' pattern
     "ramp_duration":    60,     # seconds: how long the linear ramp takes
@@ -114,7 +121,8 @@ class GeneratorConfig(BaseModel):
     """Configurable parameters. All fields optional; only provided keys are updated."""
     model_config = ConfigDict(extra="allow", json_schema_extra={
         "example": {"mode": "stealth", "pattern": "periodic_burst", "tcp_rate": 20, "udp_rate": 10,
-                     "tcp_ratio": 60, "burst_size": 10, "burst_interval": 1.0,
+                     "tcp_ratio": 60, "tcp_burst_rate": 200, "udp_burst_rate": 150,
+                     "burst_duration": 4, "burst_interval": 15,
                      "fault_rate": 0.0, "extra_latency_ms": 0}
     })
     mode: Optional[str] = Field(
@@ -123,12 +131,13 @@ class GeneratorConfig(BaseModel):
     pattern: Optional[str] = Field(
         None,
         description="Overall sending cadence: 'constant' (one packet per interval derived from "
-                     "tcp_rate/udp_rate), 'periodic_burst' (burst_size packets back-to-back, then "
-                     "idle for burst_interval seconds), 'random' (Poisson/exponentially-"
-                     "distributed gaps between sends), or 'ramp' (combined TCP+UDP packet rate "
-                     "increases linearly from `ramp_start_rate` to `ramp_end_rate` over "
-                     "`ramp_duration` seconds, then holds at `ramp_end_rate`; split into "
-                     "TCP/UDP using `tcp_ratio`)."
+                     "tcp_rate/udp_rate), 'periodic_burst' (each protocol's effective rate becomes "
+                     "max(its own rate, its own burst rate) for burst_duration seconds every "
+                     "burst_interval seconds - a protocol at rate=0 stays silent even during a burst "
+                     "window), 'random' (Poisson/exponentially-distributed gaps between sends), or "
+                     "'ramp' (combined TCP+UDP packet rate increases linearly from `ramp_start_rate` "
+                     "to `ramp_end_rate` over `ramp_duration` seconds, then holds at `ramp_end_rate`; "
+                     "split into TCP/UDP using `tcp_ratio`)."
     )
     rate: Optional[float] = Field(
         None, ge=0,
@@ -150,13 +159,35 @@ class GeneratorConfig(BaseModel):
     min_size: Optional[int] = Field(None, ge=0, description="Minimum packet size (bytes) in 'stealth' mode.")
     max_size: Optional[int] = Field(None, ge=0, description="Maximum packet size (bytes) in 'stealth' mode.")
     tcp_ratio: Optional[int] = Field(None, ge=0, le=100, description="Percentage of packets sent as TCP (rest UDP).")
-    burst_size: Optional[int] = Field(
-        None, ge=1, le=200,
-        description="Number of packets sent back-to-back per burst, when pattern='periodic_burst'."
+    tcp_burst_rate: Optional[float] = Field(
+        None, ge=0,
+        description="TCP packets/sec (max of tcp_rate and this) during a burst window, when "
+                     "pattern='periodic_burst'. 0 (the default) means TCP never bursts."
+    )
+    udp_burst_rate: Optional[float] = Field(
+        None, ge=0,
+        description="UDP packets/sec (max of udp_rate and this) during a burst window, when "
+                     "pattern='periodic_burst'. 0 (the default) means UDP never bursts."
+    )
+    burst_rate: Optional[float] = Field(
+        None, ge=0,
+        description="Deprecated shorthand: sets both tcp_burst_rate and udp_burst_rate to the same "
+                     "value. Ignored if tcp_burst_rate/udp_burst_rate are also provided."
+    )
+    burst_duration: Optional[float] = Field(
+        None, ge=0,
+        description="Length (seconds) of each burst window, when pattern='periodic_burst'."
     )
     burst_interval: Optional[float] = Field(
         None, ge=0,
-        description="Seconds to idle between bursts, when pattern='periodic_burst'."
+        description="Period (seconds) between the start of consecutive burst windows, when "
+                     "pattern='periodic_burst'."
+    )
+    burst_size: Optional[int] = Field(
+        None, ge=1, le=200,
+        description="Deprecated, no longer used by periodic_burst (which now uses burst_rate/"
+                     "burst_duration/burst_interval, matching the other generators). Kept only "
+                     "for API backward-compatibility."
     )
     ramp_start_rate: Optional[float] = Field(
         None, ge=0,
@@ -196,8 +227,11 @@ class StatusResponse(BaseModel):
     min_size: int
     max_size: int
     tcp_ratio: int
-    burst_size: int
+    tcp_burst_rate: float
+    udp_burst_rate: float
+    burst_duration: float
     burst_interval: float
+    burst_size: int
     ramp_start_rate: float
     ramp_end_rate: float
     ramp_duration: float
@@ -311,19 +345,33 @@ def _ramp_progress(pattern: str, ramp_duration: float) -> float:
     return max(0.0, min(1.0, elapsed / ramp_duration))
 
 
+_INDEPENDENT_SCHEDULE_PATTERNS = ("constant", "random", "periodic_burst")
+
+
 def _note_pattern_transition(pattern: str):
     """Resets the ramp anchor whenever `pattern` transitions into 'ramp'; resets
     the independent TCP/UDP due-time schedule whenever `pattern` transitions
-    into 'constant'/'random' from something else, so a stale due-time left
-    over from periodic_burst/ramp doesn't delay or burst the first packet."""
+    into 'constant'/'random'/'periodic_burst' from something else, so a stale
+    due-time left over from 'ramp' doesn't delay or burst the first packet."""
     global _last_pattern, _ramp_started_at
     if pattern == "ramp" and _last_pattern != "ramp":
         _ramp_started_at = time.time()
     elif pattern != "ramp":
         _ramp_started_at = None
-    if pattern in ("constant", "random") and _last_pattern not in ("constant", "random"):
+    if pattern in _INDEPENDENT_SCHEDULE_PATTERNS and _last_pattern not in _INDEPENDENT_SCHEDULE_PATTERNS:
         _next_due["tcp"] = _next_due["udp"] = 0.0
     _last_pattern = pattern
+
+
+def _is_burst_active(burst_duration: float, burst_interval: float) -> bool:
+    """Returns True if the current moment falls inside a periodic_burst window.
+    Bursts recur every `burst_interval` seconds and last `burst_duration`
+    seconds, aligned to the wall clock (epoch time) - stateless and clock-
+    derived, so the cadence is stable across restarts/event-loop delays and
+    observable in Wireshark, exactly like the HTTP/2 generator's burst logic."""
+    if burst_interval <= 0:
+        return False
+    return (time.time() % burst_interval) < burst_duration
 
 
 def _ramp_effective_rate(ramp_start_rate: float, ramp_end_rate: float, progress: float) -> float:
@@ -371,7 +419,9 @@ def _send_loop():
             pattern         = state["pattern"]
             fault_rate      = state["fault_rate"]
             extra_latency   = state["extra_latency_ms"]
-            burst_size      = max(1, state["burst_size"])
+            tcp_burst_rate  = state["tcp_burst_rate"]
+            udp_burst_rate  = state["udp_burst_rate"]
+            burst_duration  = max(0.0, state["burst_duration"])
             burst_interval  = max(0.0, state["burst_interval"])
             ramp_start      = state["ramp_start_rate"]
             ramp_end        = state["ramp_end_rate"]
@@ -389,11 +439,12 @@ def _send_loop():
             _stop_requested.wait(timeout=0.1)
             continue
 
-        if pattern in ("constant", "random"):
+        if pattern in _INDEPENDENT_SCHEDULE_PATTERNS:
             # TCP and UDP are paced fully independently here, each strictly at
-            # its own tcp_rate/udp_rate - see _next_due's docstring for why
+            # its own tcp_rate/udp_rate (elevated to burst_rate during a burst
+            # window, for periodic_burst) - see _next_due's docstring for why
             # this must not go through the tcp_ratio coin-flip that
-            # _normal_params/_stealth_params use below for periodic_burst/ramp.
+            # _normal_params/_stealth_params use below for 'ramp'.
             now = time.time()
             if _next_due["tcp"] > now and _next_due["udp"] > now:
                 wait = min(_next_due["tcp"], _next_due["udp"]) - now
@@ -402,6 +453,17 @@ def _send_loop():
 
             proto = "tcp" if _next_due["tcp"] <= _next_due["udp"] else "udp"
             rate  = tcp_rate if proto == "tcp" else udp_rate
+            # A protocol with rate=0 (intentionally silent) or burst_rate=0
+            # (never configured to burst - the default, so a protocol this
+            # profile phase doesn't mention stays untouched) never gets
+            # pulled up during a burst window. TCP and UDP have independent
+            # burst rates (matching tcp_packet_size/udp_packet_size) since
+            # profiles can burst only one protocol (tcpudp_heavy.yaml's
+            # tcp_burst phase) or both at different rates (burst_mode.yaml).
+            burst_rate = tcp_burst_rate if proto == "tcp" else udp_burst_rate
+            if (pattern == "periodic_burst" and rate > 0 and burst_rate > 0
+                    and _is_burst_active(burst_duration, burst_interval)):
+                rate = max(rate, burst_rate)
             size  = (
                 (tcp_packet_size if proto == "tcp" else udp_packet_size) if mode == "normal"
                 else random.randint(min_size, max_size)
@@ -416,48 +478,24 @@ def _send_loop():
             _send_packet(proto, size, fault_rate, extra_latency)
             continue
 
-        # periodic_burst / ramp: protocol choice here intentionally still comes
-        # from tcp_ratio, splitting a single combined rate (see
-        # _ramp_effective_rate's docstring) - constant/random are handled above.
-        ramp_interval = None
-        if pattern == "ramp":
-            progress = _ramp_progress(pattern, ramp_duration)
-            effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
-            if effective_rate <= 0:
-                _stop_requested.wait(timeout=0.1)
+        # ramp: protocol choice here intentionally still comes from tcp_ratio,
+        # splitting a single combined rate (see _ramp_effective_rate's
+        # docstring) - constant/random/periodic_burst are handled above.
+        progress = _ramp_progress(pattern, ramp_duration)
+        effective_rate = _ramp_effective_rate(ramp_start, ramp_end, progress)
+        if effective_rate <= 0:
+            _stop_requested.wait(timeout=0.1)
+            continue
+        ramp_interval = 1.0 / effective_rate
+
+        with _lock:
+            if not state["running"]:
                 continue
-            ramp_interval = 1.0 / effective_rate
 
-        n_packets = burst_size if pattern == "periodic_burst" else 1
-
-        for i in range(n_packets):
-            # Re-check running on every packet so a mid-burst /stop takes effect immediately.
-            with _lock:
-                if not state["running"]:
-                    break
-
-            size, interval, proto = (
-                _normal_params() if mode == "normal" else _stealth_params()
-            )
-            if ramp_interval is not None:
-                interval = ramp_interval
-
-            _send_packet(proto, size, fault_rate, extra_latency)
-
-            if pattern == "periodic_burst":
-                # Tight gap between packets within a burst; the real pause
-                # happens once after the whole burst, below.
-                if i < n_packets - 1:
-                    if _stop_requested.wait(timeout=0.005):
-                        break
-            else:  # "ramp"
-                if _stop_requested.wait(timeout=interval):
-                    break
-
-        if pattern == "periodic_burst":
-            # Long idle between bursts — interruptible so /stop takes effect at once.
-            if _stop_requested.wait(timeout=burst_interval):
-                continue
+        size, _, proto = _normal_params() if mode == "normal" else _stealth_params()
+        _send_packet(proto, size, fault_rate, extra_latency)
+        if _stop_requested.wait(timeout=ramp_interval):
+            continue
 
 
 def _metrics_loop():
@@ -540,6 +578,19 @@ def _expand_packet_size_shorthand(updates: dict) -> dict:
     return updates
 
 
+def _expand_burst_rate_shorthand(updates: dict) -> dict:
+    """If the caller passed the deprecated combined `burst_rate`, expand it into
+    `tcp_burst_rate` and `udp_burst_rate` - unless those were also provided
+    explicitly, in which case the explicit values win."""
+    if 'burst_rate' not in updates:
+        return updates
+    updates = dict(updates)                # don't mutate the caller's dict
+    rate = updates.pop('burst_rate')       # remove; not a state key
+    updates.setdefault('tcp_burst_rate', rate)
+    updates.setdefault('udp_burst_rate', rate)
+    return updates
+
+
 # ── REST API ──────────────────────────────────────────────────────────────────
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
@@ -547,6 +598,7 @@ def _expand_packet_size_shorthand(updates: dict) -> dict:
 async def start(body: GeneratorConfig = Body(default=GeneratorConfig())):
     updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
     updates = _expand_packet_size_shorthand(updates)
+    updates = _expand_burst_rate_shorthand(updates)
     with _lock:
         state["running"]      = True
         state["packets_sent"] = 0
@@ -571,11 +623,13 @@ async def stop():
                         "('constant'|'periodic_burst'|'random'|'ramp'), tcp_rate, udp_rate, "
                         "tcp_packet_size, udp_packet_size (or the deprecated combined "
                         "packet_size), mean_interval, min_size, max_size, tcp_ratio, "
-                        "burst_size, burst_interval, ramp_start_rate, ramp_end_rate, "
-                        "ramp_duration, fault_rate, extra_latency_ms.")
+                        "tcp_burst_rate, udp_burst_rate (or the deprecated combined burst_rate), "
+                        "burst_duration, burst_interval, ramp_start_rate, "
+                        "ramp_end_rate, ramp_duration, fault_rate, extra_latency_ms.")
 async def config(body: GeneratorConfig = Body(...)):
     updates = _expand_rate_shorthand(body.model_dump(exclude_none=True), state["tcp_ratio"])
     updates = _expand_packet_size_shorthand(updates)
+    updates = _expand_burst_rate_shorthand(updates)
     with _lock:
         state.update({k: v for k, v in updates.items() if k in state})
         mode = state["mode"]

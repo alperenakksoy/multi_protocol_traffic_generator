@@ -314,6 +314,40 @@ def _translate_mqtt(p: dict) -> dict:
     return cfg
 
 
+def _translate_tcpudp(p: dict) -> dict:
+    """Translates YAML-friendly keys into the fields gen-tcpudp actually reads.
+    `rate`/`packet_size`/`burst_rate` are per-protocol (tcp_rate/udp_rate,
+    tcp_packet_size/udp_packet_size, tcp_burst_rate/udp_burst_rate) since a
+    profile can burst only one protocol (tcpudp_heavy.yaml's tcp_burst phase)
+    or both at different burst rates (burst_mode.yaml) - `tcp.burst_rate: 200`
+    must land as `tcp_burst_rate: 200`, not a bare `burst_rate` that the
+    generator would apply to both protocols alike.
+
+    Generator-level fields (mode, pattern, burst_duration, burst_interval,
+    tcp_ratio, mean_interval, min_size, max_size, ramp_start_rate,
+    ramp_end_rate, ramp_duration) may be nested under a shared `tcpudp:`
+    block (e.g. balanced.yaml) OR under `tcp:`/`udp:` alongside rate/
+    packet_size/burst_rate (e.g. tcpudp_heavy.yaml, burst_mode.yaml) - merge
+    from all three, excluding the per-protocol keys already handled above.
+    Later sources win on conflict; `tcpudp:` (if present) takes precedence."""
+    tcp, udp, tcpudp = p.get("tcp", {}), p.get("udp", {}), p.get("tcpudp", {})
+    per_protocol = ("rate", "packet_size", "burst_rate")
+    cfg = {
+        "tcp_rate":        tcp.get("rate", 0),
+        "udp_rate":        udp.get("rate", 0),
+        "tcp_packet_size": tcp.get("packet_size", 512),
+        "udp_packet_size": udp.get("packet_size", 512),
+        **{k: v for k, v in tcp.items() if k not in per_protocol},
+        **{k: v for k, v in udp.items() if k not in per_protocol},
+        **tcpudp,
+    }
+    if "burst_rate" in tcp:
+        cfg["tcp_burst_rate"] = tcp["burst_rate"]
+    if "burst_rate" in udp:
+        cfg["udp_burst_rate"] = udp["burst_rate"]
+    return cfg
+
+
 def _phase_to_gen_configs(phase: dict) -> dict[str, dict]:
     """Convert a phase's 'protocols' block into per-generator configs."""
     p = phase.get("protocols", {})
@@ -321,16 +355,7 @@ def _phase_to_gen_configs(phase: dict) -> dict[str, dict]:
         "gen-http2":  _translate_http2(p.get("http2", {})),
         "gen-quic":   {k: v for k, v in p.get("quic",  {}).items()},
         "gen-mqtt":   _translate_mqtt(p.get("mqtt", {})),
-        "gen-tcpudp": {
-            "tcp_rate":        p.get("tcp", {}).get("rate", 0),
-            "udp_rate":        p.get("udp", {}).get("rate", 0),
-            "tcp_packet_size": p.get("tcp", {}).get("packet_size", 512),
-            "udp_packet_size": p.get("udp", {}).get("packet_size", 512),
-            # Forward the rest of the tcpudp block as-is: mode, mean_interval,
-            # min_size, max_size, tcp_ratio, pattern, burst_size, burst_interval,
-            # ramp_start_rate, ramp_end_rate, ramp_duration.
-            **p.get("tcpudp", {}),
-        },
+        "gen-tcpudp": _translate_tcpudp(p),
     }
 
 
