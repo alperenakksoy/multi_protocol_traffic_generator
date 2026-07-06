@@ -225,18 +225,17 @@ Each generator additionally exposes its own `POST /start`, `POST /stop`, `PATCH 
 
 ## Multi-Machine Deployment (Analysis Task 5)
 
-Two extra Compose files split the system across 2 lab machines:
+Two extra Compose files split the system across 2 lab machines. `captures/capture_05_multisystem.sh` drives the whole thing — one command per machine:
 
 ```bash
-# On Machine B (targets + broker + metrics):
-docker-compose -f docker-compose.targets.yml up --build
+# Step 1, on Machine B (targets) — FIRST:
+./captures/capture_05_multisystem.sh targets
 
-# Find Machine B's IP, then on Machine A (controller + dashboard + generators):
-echo "TARGET_B_IP=192.168.1.42" > .env   # use Machine B's real IP
-docker-compose -f docker-compose.generators.yml up --build
+# Step 2, on Machine A (generators), using the IP Machine B printed:
+./captures/capture_05_multisystem.sh generators <MACHINE_B_IP>
 ```
 
-Capture on the **physical** network interface (not `docker0`/`br-*`) on either machine to see genuine inter-machine traffic. See [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md) (Capture 5) for the full walkthrough.
+It builds/starts the right Compose file on each side, wires up `TARGET_B_IP` automatically, starts traffic on Machine A, and captures 70s on Machine B's **physical** interface (not `docker0`/`br-*`) to see genuine inter-machine traffic — saved as `captures/05_multisystem_<hostname>.pcapng`. See [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md) (Capture 5) for the full walkthrough.
 
 ---
 

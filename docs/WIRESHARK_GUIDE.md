@@ -263,35 +263,23 @@ Look for: `mqtt.msgtype == 14` (DISCONNECT) or TCP connection terminations on po
 
 ## Capture 5: Multi-System Deployment
 
-**Prerequisite**: two lab machines with a network connection.
+**Prerequisite**: two lab machines with a network connection (same LAN, reachable from one another).
 
-**Setup:**
+**Setup:** `captures/capture_05_multisystem.sh` drives the whole split deployment — one command per machine, in this order:
 
-Machine B (targets) — start this **first**:
 ```bash
-docker-compose -f docker-compose.targets.yml up --build
+# Step 1 — on Machine B (targets), FIRST:
+./captures/capture_05_multisystem.sh targets
 ```
+This builds and starts `docker-compose.targets.yml`, prints Machine B's IP, and waits for you to confirm Machine A is running before it starts capturing.
 
-Find Machine B's IP:
 ```bash
-ip addr show eth0       # Linux
-ipconfig getifaddr en0  # macOS
+# Step 2 — on Machine A (generators), using the IP Machine B printed:
+./captures/capture_05_multisystem.sh generators <MACHINE_B_IP>
 ```
+This writes `.env` with `TARGET_B_IP`, starts `docker-compose.generators.yml`, and automatically loads the `balanced` profile and starts traffic — no manual `curl` calls needed. The generators read `TARGET_B_IP` via environment variables (`TARGET_URL`, `TARGET_HOST`, `BROKER_HOST`, `METRICS_URL` in `docker-compose.generators.yml`) — no YAML changes needed; the same 3 profiles (`balanced`, `http2_heavy`, `mqtt_heavy`) work unchanged on both single- and multi-machine setups.
 
-Machine A (controller + dashboard + generators):
-```bash
-# Copy .env.example to .env and set Machine B's real IP, e.g.:
-echo "TARGET_B_IP=192.168.1.42" > .env
-
-docker-compose -f docker-compose.generators.yml up --build
-```
-The generators read `TARGET_B_IP` via environment variables (`TARGET_URL`, `TARGET_HOST`, `BROKER_HOST`, `METRICS_URL` in `docker-compose.generators.yml`) — no YAML changes needed; the same 3 profiles (`balanced`, `http2_heavy`, `mqtt_heavy`) work unchanged on both single- and multi-machine setups.
-
-**Wireshark:**
-- On machine B, interface `eth0` (the physical interface, not docker0)
-- Or: Wireshark on the switch/router between the two machines
-
-Start the capture, run for 60 seconds, stop.
+Back on Machine B, press ENTER when prompted (once Machine A is generating traffic) — the script then captures 70s on the physical interface (auto-detected, or set `IFACE=eth0`/`IFACE=en0` to override) and saves `captures/05_multisystem_<hostname>.pcapng`. Requires tshark/Wireshark installed on Machine B; if capture fails with a permissions error, rerun with `sudo`.
 
 **What differs compared to the single-machine setup:**
 - Slightly higher latency (a real network hop instead of loopback)
