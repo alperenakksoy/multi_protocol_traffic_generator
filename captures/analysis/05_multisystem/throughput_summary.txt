@@ -1,0 +1,8 @@
+HTTP/2 / Single-machine: 2400 requests / 69.9s = 34.3 requests/s
+HTTP/2 / Multi-machine: 1815 requests / 70.0s = 25.9 requests/s
+HTTP/2 throughput change: 34.3 -> 25.9 requests/s (-24.5%)
+
+MQTT / Single-machine: 1966 messages / 69.9s = 28.1 messages/s
+MQTT / Multi-machine: 1938 messages / 70.0s = 27.7 messages/s
+MQTT throughput change: 28.1 -> 27.7 messages/s (-1.6%)
+
