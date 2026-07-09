@@ -36,6 +36,15 @@
 #     01_protocol_distribution.pcapng, but real host IPs instead of Docker's
 #     172.x.x.x range
 #   • Conversations → IPv4 — confirms genuine inter-machine traffic
+#
+# Comparability with 01_protocol_distribution.pcapng:
+#   To make this a like-for-like comparison (not just "same profile"), Machine
+#   B's capture now matches capture_01's methodology exactly:
+#     - same filter: "not port 9090" (excludes generator -> metrics reporting
+#       traffic, which only exists on the wire here because the metrics
+#       collector sits on Machine B in this deployment)
+#     - same timing: capture starts only after WARMUP+5s have elapsed, i.e.
+#       pure post-warmup steady-state traffic, not the ramp-up phase
 
 set -euo pipefail
 
@@ -123,20 +132,26 @@ run_targets() {
     log ">>> Now on Machine A, run:"
     log ">>>     ./captures/capture_05_multisystem.sh generators $ip"
     echo
-    read -r -p "Press ENTER once Machine A is started and generating traffic... " _
+    read -r -p "Press ENTER as soon as Machine A has started generating traffic (right after its 'Loading profile...' log line)... " _
+
+    # Match capture_01's methodology exactly: only start capturing once the
+    # profile's warmup ramp has fully completed, so this window is pure
+    # steady-state traffic, not a mix of ramp-up + steady-state.
+    log "Waiting $((WARMUP + 5))s for Machine A's warmup to finish before capturing (matches 01_protocol_distribution.pcapng's post-warmup window)..."
+    sleep $((WARMUP + 5))
 
     local tshark_bin; tshark_bin=$(find_tshark)
     local outfile="$OUT_DIR/05_multisystem_${HOSTNAME_LABEL}.pcapng"
 
-    log "Capturing on $iface for ${CAPTURE_DURATION}s..."
-    if ! "$tshark_bin" -i "$iface" -q -a duration:$CAPTURE_DURATION -F pcapng -w "$outfile"; then
+    log "Capturing on $iface for ${CAPTURE_DURATION}s (filtered: not port 9090, same as capture 01)..."
+    if ! "$tshark_bin" -i "$iface" -q -f "not port 9090" -a duration:$CAPTURE_DURATION -F pcapng -w "$outfile"; then
         die "tshark failed — it usually needs elevated privileges. Try: sudo $0 targets (or fix capture permissions for your Wireshark install)."
     fi
 
     log "Done. Output: $outfile"
     log ""
     log "Compare with $OUT_DIR/01_protocol_distribution.pcapng in Wireshark:"
-    log "  Statistics -> Protocol Hierarchy   (same distribution)"
+    log "  Statistics -> Protocol Hierarchy   (same distribution, same filter, both post-warmup)"
     log "  Statistics -> Conversations -> IPv4 (real host IPs, not Docker's 172.x.x.x)"
 }
 
@@ -171,7 +186,8 @@ run_generators() {
 
     local total=$((WARMUP + CAPTURE_DURATION + 15))
     log "Traffic is running for ${total}s (covers Machine B's ${CAPTURE_DURATION}s capture window + warmup + buffer)."
-    log "Switch to Machine B now and press ENTER there to start its capture."
+    log "Switch to Machine B now and press ENTER there right away — it will auto-wait $((WARMUP + 5))s"
+    log "for the warmup ramp to finish before it actually starts capturing, so no manual timing needed."
     sleep "$total"
 
     log "Stopping traffic..."

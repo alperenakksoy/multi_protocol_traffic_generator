@@ -1,0 +1,8 @@
+Capture duration: 245.0s
+HTTP/2 packets: 164513   QUIC packets: 35625
+
+Burst phase (0-120s) baseline (median pkt/s): 732.5
+Detected burst peaks (t, pkt/s): (10s, 1863), (42s, 1835), (70s, 1773), (100s, 1876)
+
+Constant phase (120-180s) mean pkt/s: 679.2
+Ramp phase (180-240s) mean pkt/s: 436.7

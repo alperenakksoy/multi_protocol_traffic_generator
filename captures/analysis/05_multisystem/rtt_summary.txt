@@ -1,0 +1,11 @@
+HTTP/2:
+  single-machine : n=  6044  median=  0.062 ms  mean=  0.201 ms  p95=  0.803 ms  max= 41.188 ms
+  multi-machine  : n=  2235  median=  6.138 ms  mean=  4.620 ms  p95= 10.645 ms  max= 89.484 ms
+
+MQTT:
+  single-machine : n=  4725  median=  0.057 ms  mean= 14.780 ms  p95= 37.773 ms  max= 50.213 ms
+  multi-machine  : n=  4446  median=  5.326 ms  mean=  4.873 ms  p95= 10.877 ms  max=109.630 ms
+
+Raw TCP:
+  single-machine : n=  2550  median=  0.028 ms  mean=  0.090 ms  p95=  0.421 ms  max=  1.597 ms
+  multi-machine  : n=  5022  median=  0.336 ms  mean=  4.025 ms  p95= 10.749 ms  max=236.183 ms
