@@ -317,10 +317,12 @@ def _note_send_result(success: bool):
               f"{TARGET_HOST} currently resolves to {resolved_ip}", flush=True)
 
 
-def _send_tcp(data: bytes):
+def _send_tcp(data: bytes, t0: float):
+    """`t0` is the caller's start time (captured before any extra_latency_ms
+    sleep), not a fresh one here, so elapsed_ms below reflects the full
+    injected delay plus the real connect+send time, not just the latter."""
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(2.0)
-    t0 = time.perf_counter()
     try:
         s.connect((TARGET_HOST, TARGET_PORT))
         s.sendall(data)
@@ -344,18 +346,26 @@ def _send_tcp(data: bytes):
         s.close()
 
 
-def _send_udp(data: bytes):
+def _send_udp(data: bytes, t0: float):
+    """`t0` is the caller's start time (captured before any extra_latency_ms
+    sleep), matching _send_tcp, so extra_latency_ms shows up in latency_ms
+    for UDP too - previously a successful UDP send never touched
+    _latency_window at all, so latency_ms only ever reflected TCP sends."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.sendto(data, (TARGET_HOST, TARGET_PORT))
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         with _lock:
             state["packets_sent"] += 1
             state["bytes_sent"]   += len(data)
         _bytes_window.append((time.time(), len(data)))
+        _latency_window.append((time.time(), elapsed_ms))
         _note_send_result(True)
     except Exception:
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         with _lock:
             state["errors"] += 1
+        _latency_window.append((time.time(), elapsed_ms))
         _note_send_result(False)
     finally:
         s.close()
@@ -436,9 +446,9 @@ def _send_packet(proto: str, size: int, fault_rate: float, extra_latency: float)
     else:
         payload = os.urandom(size)
         if proto == "tcp":
-            _send_tcp(payload)
+            _send_tcp(payload, t0)
         else:
-            _send_udp(payload)
+            _send_udp(payload, t0)
 
 
 def _send_loop_iteration():

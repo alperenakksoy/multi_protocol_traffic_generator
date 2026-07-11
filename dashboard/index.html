@@ -1411,6 +1411,17 @@
         </div>
         <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
           <div class="setting-label">
+            TCP ratio
+            <i class="info-icon" data-tip="Percentage of packets sent as TCP, the rest as UDP. Applied whenever a combined rate is set (the Overview tab's Rate slider, or the Ramp pattern here). Providing separate TCP/UDP rates directly overrides this.">i</i>
+          </div>
+          <div class="rate-control">
+            <input type="range" min="0" max="100" step="5" value="60" id="tcpratio-gen-tcpudp"
+                   oninput="onTcpRatioChange('gen-tcpudp', this.value)">
+            <span class="setting-display" id="tcpratio-disp-gen-tcpudp">60% TCP</span>
+          </div>
+        </div>
+        <div class="gen-row gen-row-auto" style="grid-template-columns: 160px 1fr;">
+          <div class="setting-label">
             Burst size
             <i class="info-icon" data-tip="Number of packets sent back-to-back during one burst (only used with Periodic burst pattern).">i</i>
           </div>
@@ -2470,6 +2481,11 @@
       const el = document.getElementById('pattern-gen-tcpudp');
       if (document.activeElement !== el) el.value = tcpudpG.pattern;
     }
+    if (tcpudpG.tcp_ratio !== undefined) {
+      const el = document.getElementById('tcpratio-gen-tcpudp');
+      const disp = document.getElementById('tcpratio-disp-gen-tcpudp');
+      if (document.activeElement !== el) { el.value = tcpudpG.tcp_ratio; disp.textContent = tcpudpG.tcp_ratio + '% TCP'; }
+    }
     if (tcpudpG.burst_size !== undefined) {
       const el = document.getElementById('burstsize-gen-tcpudp');
       const disp = document.getElementById('burstsize-disp-gen-tcpudp');
@@ -3059,6 +3075,16 @@
     faultTimers[name + '-burstsize'] = setTimeout(() => {
       patchGen(name, {burst_size: n});
       addLog(now(), `${PROTOCOL_LABELS[name] || name}: burst size → ${n}`, 'info');
+    }, 400);
+  }
+
+  function onTcpRatioChange(name, value) {
+    const n = parseInt(value);
+    document.getElementById('tcpratio-disp-' + name).textContent = n + '% TCP';
+    clearTimeout(faultTimers[name + '-tcpratio']);
+    faultTimers[name + '-tcpratio'] = setTimeout(() => {
+      patchGen(name, {tcp_ratio: n});
+      addLog(now(), `${PROTOCOL_LABELS[name] || name}: TCP ratio → ${n}% TCP / ${100 - n}% UDP`, 'info');
     }, 400);
   }
 
