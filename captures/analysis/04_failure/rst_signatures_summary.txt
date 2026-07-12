@@ -1,5 +1,4 @@
-1. docker stop target-http2: 7 RST packets over 62s
-  RST timestamps: 25.88s, 25.95s, 25.95s, 25.95s, 26.01s, 26.02s, 26.02s
+1. docker stop target-tcpudp: 0 RST packets over 50s
 2. iptables REJECT --reject-with tcp-reset: 1411 RST packets over 50s
   RST timestamps: 9.89s, 9.95s, 9.95s, 9.95s, 10.01s, 10.01s, 10.01s, 10.08s, 10.08s, 10.08s ...
 3. Multi-machine, real Wi-Fi link (no deliberate trigger): 40 RST packets over 70s

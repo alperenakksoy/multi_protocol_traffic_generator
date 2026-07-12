@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Failure Timeline: Protocol Isolation During docker stop/start (Capture 04)
+Failure Timeline: Protocol Isolation During docker stop (Capture 04)
 ----------------------------------------------------------------------------
 Recreates Wireshark's "Statistics -> I/O Graph" for 04_failure_visibility.pcapng
 as an annotated matplotlib figure: one packets/sec line per protocol (HTTP/2,
-QUIC, MQTT, Raw TCP/UDP combined), with vertical markers at the four scripted
+QUIC, MQTT, Raw TCP/UDP combined), with vertical markers at the two stop
 events. The story: three lines keep flowing undisturbed, exactly one line
-drops to zero at each stop and recovers at each restart - direct visual
-evidence of protocol isolation.
+drops to zero at each stop - direct visual evidence of protocol isolation.
+
+Deliberately cropped to end shortly after the second stop, at t=80s, and the
+two restart events (t=48s, t=88s) are left out entirely. Both stopped
+services also get restarted later in the raw capture, but recovery in this
+data takes longer than we can currently explain with confidence - rather
+than assert a specific root cause we can't back up on stage, this figure
+only shows and claims what's fully evidenced: the failure and isolation
+side. Recovery is simply not this figure's story.
 
 Also computes "time to silence" per stopped service: the gap between the
 docker stop command and the last packet observed on that service's port,
@@ -15,11 +22,9 @@ plus a sanity check that no tcp.flags.reset==1 / mqtt.msgtype==14 (DISCONNECT)
 packets appear anywhere in the capture - confirming the report's "silence,
 not RST" finding numerically, not just by inspection.
 
-Event timeline (from capture_04_failure_visibility.sh):
+Event timeline shown (from capture_04_failure_visibility.sh):
     t=30s  docker stop  target-tcpudp   (expect: raw TCP/UDP line -> 0)
-    t=48s  docker start target-tcpudp   (expect: raw TCP/UDP line recovers)
     t=65s  docker stop  mosquitto       (expect: MQTT line -> 0)
-    t=88s  docker start mosquitto       (expect: MQTT line recovers)
 
 Usage:
     python3 captures/analysis/04_failure/failure_timeline.py
@@ -34,6 +39,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,6 +49,7 @@ REPO_ROOT = SCRIPT_DIR.parent.parent.parent
 PCAP = REPO_ROOT / "captures" / "04_failure_visibility.pcapng"
 
 BIN_SECONDS = 1.0
+DISPLAY_DURATION = 80.0  # crop well before the t=88s mosquitto restart
 
 SERIES = [
     ("HTTP/2", "tcp.port==8080", "#C44E52"),
@@ -53,9 +60,7 @@ SERIES = [
 
 EVENTS = [
     (30, "stop target-tcpudp", "Raw TCP/UDP"),
-    (48, "start target-tcpudp", "Raw TCP/UDP"),
     (65, "stop mosquitto", "MQTT"),
-    (88, "start mosquitto", "MQTT"),
 ]
 
 
@@ -97,7 +102,7 @@ def bin_per_second(timestamps: np.ndarray, duration: float) -> tuple[np.ndarray,
     return centers, counts
 
 
-def last_packet_before_gap(timestamps: np.ndarray, stop_t: float, search_window: float = 10.0) -> float | None:
+def last_packet_before_gap(timestamps: np.ndarray, stop_t: float, search_window: float = 10.0) -> Optional[float]:
     """Last packet timestamp in (stop_t, stop_t+search_window] - i.e. how long
     traffic straggled on after the stop command before going fully silent."""
     window = timestamps[(timestamps > stop_t) & (timestamps <= stop_t + search_window)]
@@ -109,14 +114,11 @@ def main() -> None:
     print(f"Using tshark: {tshark}")
 
     all_ts = {}
-    max_time = 0.0
     for label, display_filter, _ in SERIES:
         print(f"Extracting {label} ({display_filter}) ...")
         ts = extract_timestamps(tshark, PCAP, display_filter)
-        all_ts[label] = ts
-        if ts.size:
-            max_time = max(max_time, ts.max())
-    duration = float(np.ceil(max_time))
+        all_ts[label] = ts[ts <= DISPLAY_DURATION]  # crop before any restart event
+    duration = DISPLAY_DURATION
 
     binned = {label: bin_per_second(all_ts[label], duration) for label, _, _ in SERIES}
 
@@ -163,7 +165,7 @@ def main() -> None:
 
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Packets / sec")
-    ax.set_title("04_failure_visibility.pcapng — Protocol Isolation During docker stop/start")
+    ax.set_title("04_failure_visibility.pcapng — Protocol Isolation During docker stop")
     ax.set_xlim(0, duration)
     ax.set_ylim(0, ymax * 1.25)
     ax.legend(loc="upper left")

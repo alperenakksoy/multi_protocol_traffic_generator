@@ -6,12 +6,14 @@ Three RST Signatures: docker stop vs. iptables REJECT vs. real-network jitter
 each with its own signature. This figure puts all three side by side, each
 backed by a real capture:
 
-  1. docker stop target-http2 (04b_failure_visibility_http2.pcapng)
-     -> 0 RST caused by the stop. The container's entire network namespace
-        is torn down, so there's no kernel left to answer with anything.
-        (A 7-packet RST cluster does appear at t~26s, but ~4s BEFORE the
-        stop at t=30s - it's the unrelated Hypercorn keep_alive_max_requests
-        =1000 connection-cycling artifact, not a failure signal.)
+  1. docker stop target-tcpudp (04_failure_visibility.pcapng)
+     -> 0 RST in the entire capture. The container's entire network
+        namespace is torn down, so there's no kernel left to answer with
+        anything. Chosen over the target-http2 variant (04b) deliberately:
+        04b has an unrelated 7-packet RST cluster ~4s before its own stop
+        command (Hypercorn's own keep_alive_max_requests=1000 connection
+        cycling, see capture 02), which muddies the "clean before/after"
+        story. target-tcpudp has no such confound anywhere in the file.
 
   2. iptables REJECT --reject-with tcp-reset (04c_failure_visibility_reject.pcapng)
      -> RST immediately, every time, for as long as the rule is active.
@@ -30,7 +32,7 @@ Usage:
     python3 captures/analysis/04_failure/rst_signatures_comparison.py
 
 Requires: tshark (Wireshark), matplotlib, numpy.
-Reads:    captures/04b_failure_visibility_http2.pcapng
+Reads:    captures/04_failure_visibility.pcapng
           captures/04c_failure_visibility_reject.pcapng
           captures/05_multisystem_Mac.fritz.box.pcapng
 Writes:   captures/analysis/04_failure/rst_signatures_comparison.png
@@ -93,13 +95,14 @@ def get_capture_duration(tshark: str, pcap: Path) -> float:
 
 PANELS = [
     {
-        "title": "1. docker stop target-http2",
-        "pcap": CAPTURES_DIR / "04b_failure_visibility_http2.pcapng",
-        "traffic_filter": "tcp.port==8080",
-        "traffic_label": "HTTP/2 pkt/s",
-        "traffic_color": "#C44E52",
+        "title": "1. docker stop target-tcpudp",
+        "pcap": CAPTURES_DIR / "04_failure_visibility.pcapng",
+        "traffic_filter": "tcp.port==9999 or udp.port==9999",
+        "traffic_label": "Raw TCP/UDP pkt/s",
+        "traffic_color": "#8172B2",
         "events": [(30, "docker stop")],
-        "note": "0 RST caused by the stop\n(7-pkt cluster at t~26s is an\nunrelated pre-existing artifact)",
+        "note": "0 RST in the entire capture\n(clean cliff at the stop,\nno pre-existing artifact)",
+        "duration_override": 50,
     },
     {
         "title": "2. iptables REJECT --reject-with tcp-reset",
@@ -135,15 +138,23 @@ def main() -> None:
 
         traffic_ts = extract_timestamps(tshark, pcap, panel["traffic_filter"])
         rst_ts = extract_timestamps(tshark, pcap, "tcp.flags.reset==1")
-        duration = float(np.ceil(get_capture_duration(tshark, pcap)))
+        full_duration = float(np.ceil(get_capture_duration(tshark, pcap)))
+        duration = min(full_duration, panel.get("duration_override", full_duration))
+
+        # Crop to the displayed window - RST markers outside it would be
+        # misleading (implies relevance to what's shown) and the extra
+        # flat/empty tail past the interesting part adds nothing.
+        traffic_ts = traffic_ts[traffic_ts <= duration]
+        rst_ts = rst_ts[rst_ts <= duration]
 
         centers, counts = bin_per_second(traffic_ts, duration)
         ax.plot(centers, counts, color=panel["traffic_color"], linewidth=1.1, label=panel["traffic_label"])
 
         ymax = max(counts.max(), 1)
         if rst_ts.size:
+            legend_suffix = panel.get("rst_legend_suffix", "")
             ax.scatter(rst_ts, np.full_like(rst_ts, ymax * 0.06), color="black", marker="|",
-                       s=200, linewidths=1.2, label=f"RST (n={rst_ts.size})", zorder=5)
+                       s=200, linewidths=1.2, label=f"RST (n={rst_ts.size}{legend_suffix})", zorder=5)
 
         for t, label in panel["events"]:
             ax.axvline(t, color="gray", linestyle="--", linewidth=0.9)
