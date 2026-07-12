@@ -1,4 +1,4 @@
-Capture duration: 125.0s
+Capture duration: 80.0s
 
 t=30s stop target-tcpudp: last Raw TCP/UDP packet at t=30.20s (+0.20s after stop command)
 t=65s stop mosquitto: last MQTT packet at t=65.82s (+0.82s after stop command)
