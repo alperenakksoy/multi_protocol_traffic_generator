@@ -36,7 +36,7 @@
       line-height: 1.5;
     }
 
-    /* ── Header ─────────────────────────────────────────────────────── */
+    /* Header */
     header {
       position: sticky;
       top: 0;
@@ -79,7 +79,7 @@
 
     .header-right { display: flex; align-items: center; gap: 8px; }
 
-    /* ── Buttons ─────────────────────────────────────────────────────── */
+    /* Buttons */
     .btn {
       font-family: var(--font);
       font-size: 13px;
@@ -111,7 +111,7 @@
 
     .btn-sm { font-size: 12px; padding: 3px 10px; }
 
-    /* ── Tab bar ─────────────────────────────────────────────────────── */
+    /* Tab bar */
     .tab-bar {
       position: sticky;
       top: 52px;
@@ -166,11 +166,11 @@
     .sub-tab-pane { display: none; }
     .sub-tab-pane.active { display: block; }
 
-    /* ── Tab panes ───────────────────────────────────────────────────── */
+    /* Tab panes */
     .tab-pane { display: none; }
     .tab-pane.active { display: block; }
 
-    /* ── Layout ──────────────────────────────────────────────────────── */
+    /* Layout */
     main {
       max-width: 1000px;
       margin: 0 auto;
@@ -188,7 +188,7 @@
       margin-bottom: 10px;
     }
 
-    /* ── Info icon & tooltip ─────────────────────────────────────────── */
+    /* Info icon & tooltip */
     .info-icon {
       display: inline-flex;
       align-items: center;
@@ -249,7 +249,7 @@
     .info-icon:hover::after,
     .info-icon:hover::before { opacity: 1; }
 
-    /* ── KPI grid ────────────────────────────────────────────────────── */
+    /* KPI grid */
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -278,7 +278,7 @@
 
     .kpi-label { font-size: 12px; color: var(--text-muted); }
 
-    /* ── Live Performance (sparklines) ──────────────────────────────────── */
+    /* Live Performance (sparklines) */
     .perf-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -323,7 +323,7 @@
     .swatch-rate    { background: var(--accent); }
     .swatch-latency { background: var(--orange); }
 
-    /* ── Profile row ─────────────────────────────────────────────────── */
+    /* Profile row */
     .profile-row {
       display: flex;
       align-items: center;
@@ -333,7 +333,7 @@
 
     .profile-label { font-size: 13px; color: var(--text-muted); margin-right: 4px; }
 
-    /* ── Live Performance grid ───────────────────────────────────────── */
+    /* Live Performance grid */
     .perf-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -362,7 +362,7 @@
 
     .perf-canvas { width: 100%; display: block; }
 
-    /* ── Live Network Analysis (protocol distribution + captured I/O) ──────── */
+    /* Live Network Analysis (protocol distribution + captured I/O) */
     .dist-box {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -398,7 +398,7 @@
     .analysis-io-canvas { width: 100%; height: 110px; display: block; }
     .hist-canvas { display: block; border-bottom: 1px solid var(--border-muted); }
 
-    /* ── Generator table ─────────────────────────────────────────────── */
+    /* Generator table */
     .gen-table {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -479,7 +479,7 @@
       color: var(--text-muted);
     }
 
-    /* ── Fault display ───────────────────────────────────────────────── */
+    /* Fault display */
     .fault-display {
       font-family: var(--mono);
       font-size: 12px;
@@ -523,7 +523,7 @@
       line-height: 1.4;
     }
 
-    /* ── Toggle ──────────────────────────────────────────────────────── */
+    /* Toggle */
     .toggle-wrap { display: flex; align-items: center; gap: 8px; }
 
     .toggle {
@@ -553,7 +553,7 @@
     .toggle input:checked + .toggle-track { background: var(--accent); }
     .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
 
-    /* ── Mode selector ───────────────────────────────────────────────── */
+    /* Mode selector */
     .mode-select {
       font-family: var(--font);
       font-size: 12px;
@@ -565,7 +565,7 @@
       cursor: pointer;
     }
 
-    /* ── Log Tabs ────────────────────────────────────────────────────── */
+    /* Log Tabs */
     .log-tabs {
       display: flex;
       gap: 2px;
@@ -613,7 +613,7 @@
       user-select: none;
     }
 
-    /* ── Log ─────────────────────────────────────────────────────────── */
+    /* Log */
     .log-box {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -687,7 +687,7 @@
       padding: 1px 0;
     }
 
-    /* ── Footer ─────────────────────────────────────────────────────── */
+    /* Footer */
     .footer-meta {
       display: flex;
       gap: 20px;
@@ -697,7 +697,7 @@
     }
     .footer-meta span { font-family: var(--mono); color: var(--text-muted); }
 
-    /* ── Error banner ────────────────────────────────────────────────── */
+    /* Error banner */
     #error-banner {
       display: none;
       background: var(--red-muted);
@@ -709,7 +709,7 @@
       margin-bottom: 20px;
     }
 
-    /* ── Settings row label with (i) ─────────────────────────────────── */
+    /* Settings row label with (i) */
     .setting-label {
       display: flex;
       align-items: center;
@@ -719,7 +719,7 @@
       white-space: nowrap;
     }
 
-    /* ── Section header with row layout ─────────────────────────────── */
+    /* Section header with row layout */
     .section-row {
       display: flex;
       justify-content: space-between;
@@ -730,7 +730,7 @@
 </head>
 <body>
 
-<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<!-- Header -->
 <header>
   <div class="header-left">
     <h1>MIC Traffic Lab</h1>
@@ -746,7 +746,7 @@
   </div>
 </header>
 
-<!-- ── Tab navigation ──────────────────────────────────────────────────── -->
+<!-- Tab navigation -->
 <div class="tab-bar">
   <button class="tab-btn active" id="tabbtn-overview"   onclick="showTab('overview')">Overview</button>
   <button class="tab-btn"        id="tabbtn-protocols"  onclick="showTab('protocols')">Protocol Settings</button>
@@ -754,14 +754,12 @@
   <button class="tab-btn"        id="tabbtn-analysis"   onclick="showTab('analysis')">Analysis</button>
 </div>
 
-<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<!-- Main -->
 <main>
 
   <div id="error-banner" role="alert"></div>
 
-  <!-- ════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 1: OVERVIEW                                                       -->
-  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: OVERVIEW -->
   <div class="tab-pane active" id="tab-overview">
 
     <!-- KPIs -->
@@ -1008,9 +1006,7 @@
   </div><!-- /tab-overview -->
 
 
-  <!-- ════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 2: PROTOCOL SETTINGS                                              -->
-  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: PROTOCOL SETTINGS -->
   <div class="tab-pane" id="tab-protocols">
 
     <!-- Sub-tab bar -->
@@ -1481,9 +1477,7 @@
   </div><!-- /tab-protocols -->
 
 
-  <!-- ════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 3: RESILIENCE & FAULTS                                            -->
-  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 3: RESILIENCE & FAULTS -->
   <div class="tab-pane" id="tab-faults">
 
     <section>
@@ -1595,9 +1589,7 @@
   </div><!-- /tab-faults -->
 
 
-  <!-- ════════════════════════════════════════════════════════════════════ -->
-  <!-- TAB 4: ANALYSIS                                                        -->
-  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 4: ANALYSIS -->
   <div class="tab-pane" id="tab-analysis">
 
     <!-- Live Network Analysis (real packet capture, not generator self-reports) -->
@@ -1651,10 +1643,11 @@
   const API = 'http://localhost:8000';
   let pollInterval = null;
   let lastLogKey = '';
+  let systemRunning = false;
   const seenFailureKeys = new Set();
   const _toggleLock = {};
 
-  // ── Tab switching ─────────────────────────────────────────────────────────
+  // Tab switching
 
   function showTab(name) {
     ['overview','protocols','faults','analysis'].forEach(t => {
@@ -1670,7 +1663,7 @@
     });
   }
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  // Data
 
   const PHASE_DESCRIPTIONS = {
     http2_dominant:        'HTTP/2 GET/POST dominates, MQTT and TCP are minimal; protocol hierarchy baseline.',
@@ -1813,7 +1806,7 @@
     recovered:       'success',
   };
 
-  // ── Live sparkline state ──────────────────────────────────────────────────
+  // Live sparkline state
 
   const GEN_NAMES    = ['gen-http2','gen-quic','gen-mqtt','gen-tcpudp'];
   const SP_POINTS      = 45;   // 45 × 2s poll = 90s rolling window
@@ -2039,7 +2032,7 @@
     },
   };
 
-  // ── Formatting helpers ────────────────────────────────────────────────────
+  // Formatting helpers
 
   function fmtNum(n) {
     if (n === undefined || n === null) return '-';
@@ -2080,7 +2073,7 @@
     return new Date(epochSeconds * 1000).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
   }
 
-  // ── Log ───────────────────────────────────────────────────────────────────
+  // Log
 
   const LOG_BADGE = { success: 'OK', error: 'ERR', adaptive: 'AUTO', info: 'INFO' };
 
@@ -2215,6 +2208,7 @@
 
   function renderStatus(data) {
     const running = data.running;
+    systemRunning = running;
     setSystemStatus(running, running ? 'Running' : 'Stopped');
 
     // active phase — show warmup/cooldown progress only, not the phase name
@@ -2911,7 +2905,7 @@
     });
   }
 
-  // ── Event handlers ────────────────────────────────────────────────────────
+  // Event handlers
 
   let faultTimers = {};
 
@@ -3134,12 +3128,21 @@
 
   async function loadProfile(profile) {
     try {
-      await fetch(`${API}/config/load`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({profile}),
-      });
-      addLog(now(), `Profile loaded: ${profile}`, 'success');
+      if (systemRunning) {
+        // Already running: /config/load hot-swaps phase 1 into every generator immediately.
+        await fetch(`${API}/config/load`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({profile}),
+        });
+        addLog(now(), `Profile loaded: ${profile}`, 'success');
+      } else {
+        // Stopped: /config/load would only mark the profile as selected without
+        // starting anything (it applies phase 1 only "if running"), so start
+        // directly with this profile instead.
+        await fetch(`${API}/start?profile=${profile}`, {method: 'POST'});
+        addLog(now(), `Started with profile: ${profile}`, 'success');
+      }
       poll();
     } catch(e) { showError('Could not load profile'); }
   }
@@ -3186,7 +3189,7 @@
     } catch(e) {}
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // Helpers
 
   function getActiveProfile() {
     for (const p of ['balanced','http2_heavy','mqtt_heavy','quic_heavy','tcpudp_heavy',
@@ -3207,7 +3210,7 @@
     document.getElementById('error-banner').style.display = 'none';
   }
 
-  // ── Start polling ─────────────────────────────────────────────────────────
+  // Start polling
 
   poll();
   pollInterval = setInterval(poll, 2000);

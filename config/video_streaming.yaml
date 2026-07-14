@@ -1,17 +1,11 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: VIDEO STREAMING CDN                                      ║
-# ║  Simulates an adaptive-bitrate video streaming workload (HLS/DASH over     ║
-# ║  HTTP/2 and QUIC/HTTP3).                                                   ║
-# ║                                                                            ║
-# ║  Real-world use case: CDN edge server under viewer load — segment          ║
-# ║  requests, manifest fetches, quality ladder switches.                      ║
-# ║                                                                            ║
-# ║  Key insights:                                                             ║
-# ║    • HTTP/2 multiplexing lets many viewers share one connection            ║
-# ║    • QUIC eliminates head-of-line blocking — better on lossy links         ║
-# ║    • Large payloads (1–4 MB segments) dominate bandwidth                  ║
-# ║    • Adaptive control mimics CDN auto-scaling under viewer spike           ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# Traffic Profile: VIDEO STREAMING CDN
+# Simulates an adaptive-bitrate video streaming workload (HLS/DASH over HTTP/2 and QUIC/HTTP3).
+# Real-world use case: CDN edge server under viewer load — segment requests, manifest fetches, quality ladder switches.
+# Key insights:
+# HTTP/2 multiplexing lets many viewers share one connection
+# QUIC eliminates head-of-line blocking — better on lossy links
+# Large payloads (1–4 MB segments) dominate bandwidth
+# Adaptive control mimics CDN auto-scaling under viewer spike
 
 global:
   warmup:   15
@@ -19,7 +13,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Normal Viewing Load ──────────────────────────────────────────
+  # Phase 1: Normal Viewing Load
   - name: normal_viewing
     duration: 60
     description: >
@@ -44,7 +38,7 @@ phases:
         packet_size: 1400
         mode: normal
 
-  # ── Phase 2: Evening Peak (Viewer Spike) ──────────────────────────────────
+  # Phase 2: Evening Peak (Viewer Spike)
   - name: evening_peak
     duration: 60
     description: >
@@ -69,7 +63,7 @@ phases:
         packet_size: 1400
         mode: normal
 
-  # ── Phase 3: Network Degradation (Fault Injection) ────────────────────────
+  # Phase 3: Network Degradation (Fault Injection)
   - name: lossy_network
     duration: 60
     description: >
@@ -95,7 +89,7 @@ phases:
         packet_size: 1400
         mode: normal
 
-  # ── Phase 4: CDN Auto-Scale (Adaptive Control) ────────────────────────────
+  # Phase 4: CDN Auto-Scale (Adaptive Control)
   - name: cdn_autoscale
     duration: 75
     description: >

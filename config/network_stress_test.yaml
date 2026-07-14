@@ -1,16 +1,11 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: NETWORK STRESS TEST                                      ║
-# ║  Maximum-load test across all four protocols simultaneously.                ║
-# ║                                                                            ║
-# ║  Real-world use case: capacity planning, SLA verification, load testing    ║
-# ║  before production rollout ("how much can the stack actually handle?").    ║
-# ║                                                                            ║
-# ║  Key insights:                                                             ║
-# ║    • Phase 1: ramp up linearly — find the "knee of the curve"             ║
-# ║    • Phase 2: sustained maximum — measure steady-state throughput          ║
-# ║    • Phase 3: overload — intentional saturation, watch error rate climb   ║
-# ║    • Phase 4: recovery — adaptive control brings traffic back to stable    ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# Traffic Profile: NETWORK STRESS TEST
+# Maximum-load test across all four protocols simultaneously.
+# Real-world use case: capacity planning, SLA verification, load testing before production rollout ("how much can the stack actually handle?").
+# Key insights:
+# Phase 1: ramp up linearly — find the "knee of the curve"
+# Phase 2: sustained maximum — measure steady-state throughput
+# Phase 3: overload — intentional saturation, watch error rate climb
+# Phase 4: recovery — adaptive control brings traffic back to stable
 
 global:
   warmup:   10
@@ -18,7 +13,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Linear Ramp-Up ───────────────────────────────────────────────
+  # Phase 1: Linear Ramp-Up
   - name: ramp_up
     duration: 60
     description: >
@@ -62,7 +57,7 @@ phases:
         rate: 30
         packet_size: 1400
 
-  # ── Phase 2: Sustained Maximum Load ───────────────────────────────────────
+  # Phase 2: Sustained Maximum Load
   - name: sustained_max
     duration: 60
     description: >
@@ -102,7 +97,7 @@ phases:
         rate: 50
         packet_size: 1400
 
-  # ── Phase 3: Intentional Overload (Beyond Capacity) ───────────────────────
+  # Phase 3: Intentional Overload (Beyond Capacity)
   - name: overload
     duration: 60
     description: >
@@ -144,7 +139,7 @@ phases:
         rate: 80
         packet_size: 1400
 
-  # ── Phase 4: Auto-Recovery via Adaptive Control ───────────────────────────
+  # Phase 4: Auto-Recovery via Adaptive Control
   - name: auto_recovery
     duration: 75
     description: >

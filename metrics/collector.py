@@ -12,14 +12,14 @@ app = Flask(__name__)
 lock = threading.Lock()
 
 store = {
-    "generators":      {},   # name → latest stat snapshot
-    "generators_prev": {},   # name → snapshot before the latest one (for windowed error_rate)
-    "analyzers":       {},   # name → latest network-analyzer snapshot (totals + io_graph)
+    "generators":      {},   # name - latest stat snapshot
+    "generators_prev": {},   # name - snapshot before the latest one (for windowed error_rate)
+    "analyzers":       {},   # name - latest network-analyzer snapshot (totals + io_graph)
     "start_time":      time.time(),
 }
 
 
-# ── Receive stats from a generator ────────────────────────────────────────────
+# Receive stats from a generator
 
 @app.route("/update", methods=["POST"])
 def update():
@@ -37,7 +37,7 @@ def update():
     return jsonify({"ok": True})
 
 
-# ── Error rate ──────────────────────────────────────────────────────────────────
+# Error rate
 # Each generator counts `packets_sent` (successful sends) and `errors` (failed /
 # fault-injected sends) as disjoint counters - they are NOT errors-out-of-total.
 # The error rate is therefore errors / (errors + packets_sent), i.e. errors as a
@@ -45,12 +45,13 @@ def update():
 # and Adaptive Control each used to do independently) overstates the rate at
 # moderate fault levels and breaks completely at fault_rate=1.0, where
 # packets_sent never leaves 0 (0/0 reads as "no errors" instead of 100%).
+
 def _error_rate(errors: int, packets: int) -> float:
     total = errors + packets
     return round(errors / total, 4) if total > 0 else 0.0
 
 
-# ── Aggregated metrics endpoint ────────────────────────────────────────────────
+# Aggregated metrics endpoint
 
 @app.route("/metrics", methods=["GET"])
 def metrics():
@@ -102,7 +103,7 @@ def metrics():
     })
 
 
-# ── Receive a snapshot from a network-analyzer sidecar ─────────────────────────
+# Receive a snapshot from a network-analyzer sidecar
 
 @app.route("/analysis/update", methods=["POST"])
 def analysis_update():
@@ -117,7 +118,7 @@ def analysis_update():
     return jsonify({"ok": True})
 
 
-# ── Aggregated network-analysis endpoint ────────────────────────────────────────
+# Aggregated network-analysis endpoint
 # Each analyzer sidecar only sees the traffic crossing its own target container's
 # network namespace, so simply summing across all of them reconstructs the full
 # picture (Wireshark's "Protocol Hierarchy" + "I/O Graph", but live and continuous).
@@ -187,7 +188,7 @@ def analysis():
     })
 
 
-# ── Reset counters ─────────────────────────────────────────────────────────────
+# Reset counters
 
 @app.route("/reset", methods=["POST"])
 def reset():

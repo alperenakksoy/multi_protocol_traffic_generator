@@ -1,28 +1,21 @@
 """
 HTTP/2 Traffic Generator
-------------------------
-Sends HTTP/2 GET and POST requests using httpx (HTTP/2 enabled).
-Supports multiplexed streams over a single connection.
 
-Request rate, payload size, the GET/POST method distribution, the number of
-concurrently multiplexed streams, and the set of target paths for GET and
-POST requests (get_paths / post_paths) are all configurable at runtime.
+Sends HTTP/2 GET and POST requests using httpx (with Multiplexing over a single connection).
 
-The overall sending cadence is controlled by `pattern`: 'constant' (steady
-`rate`), 'periodic_burst' (alternates between the base `rate` and a much
-higher `burst_rate` for `burst_duration` seconds every `burst_interval`
-seconds - useful for demonstrating multiplexed-stream bursts in Wireshark
-I/O graphs), 'random' (exponentially-distributed/Poisson gaps between
-sends, with the same mean rate as 'constant' - mimics bursty, human-driven
-request traffic for the Temporal Analysis task), or 'ramp' (the effective
-rate increases linearly from `ramp_start_rate` to `ramp_end_rate` over
-`ramp_duration` seconds, then holds at `ramp_end_rate` - the assignment's
-"ramping (linear increase over time)" sending pattern, applied per-phase
-and independent of the controller's global warmup/cooldown ramp).
+All key parameters like request rate, payload size, GET/POST distribution, concurrent 
+streams, and target paths can be dynamically configured at runtime.
 
-Exposes a small REST API so the Traffic Controller can start/stop/reconfigure
-this generator at runtime and read its live statistics (used, among other
-things, as the latency signal for Adaptive Control).
+Supported sending patterns:
+- 'constant': Steady, uniform request rate.
+- 'periodic_burst': Alternates between a base rate and heavy spikes (perfect for 
+  visualizing multiplexed bursts in Wireshark).
+- 'random': Mimics human-like request behavior using Poisson-distributed intervals.
+- 'ramp': Linearly increases the rate over time (needed for the assignment's ramping task).
+
+Control & Metrics:
+Exposes a lightweight REST API so the Traffic Controller can start, stop, and reconfigure 
+the generator on the fly, as well as read live latency stats for adaptive control.
 """
 
 import os, time, asyncio, random, threading
@@ -95,7 +88,7 @@ _HISTORY_MAXLEN = 60
 _history: list[dict] = []
 
 
-# ── Models (Swagger) ────────────────────────────────────────────────────────
+# Models (Swagger)
 
 class GeneratorConfig(BaseModel):
     """Configurable parameters. All fields optional; only provided keys are updated."""
@@ -224,7 +217,7 @@ class OkResponse(BaseModel):
     ok: bool = True
 
 
-# ── HTTP/2 cleartext (h2c) client ──────────────────────────────────────────────
+# HTTP/2 cleartext (h2c) client
 #
 # httpx only negotiates HTTP/2 via TLS/ALPN; against a plain http:// target it
 # silently sends HTTP/1.1 with no error. Since this generator's target has no
@@ -598,7 +591,7 @@ def _run_background():
 threading.Thread(target=_run_background, daemon=True).start()
 
 
-# ── REST API ──────────────────────────────────────────────────────────────────
+# REST API
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")

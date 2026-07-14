@@ -1,26 +1,20 @@
 """
 MQTT Traffic Generator
-----------------------
-Publishes messages to a Mosquitto broker at a configurable rate, across
-multiple topics and QoS levels.
+Publishes messages to a Mosquitto broker at a configurable rate across multiple topics and QoS levels.
 
-Also subscribes to the same set of topics, so the broker's fan-out traffic
-(publish -> broker -> subscriber) is visible for the Wireshark analysis.
-The number of topics in rotation is configurable (topic_count), and the QoS
-of each published message can either be fixed (qos) or drawn from a
-configurable probability distribution across QoS 0/1/2 (qos_distribution).
+It also subscribes to those same topics, making the broker's fan-out traffic (pub -> broker -> sub) 
+visible for Wireshark analysis. You can configure the number of topics (topic_count) and set the QoS 
+either as a fixed level or as a probability distribution across QoS 0/1/2.
 
-The overall sending cadence is controlled by `pattern`: 'constant' (fixed
-1/rate interval between publishes), 'random' (exponentially-distributed/
-Poisson gaps between publishes, with the same mean rate as 'constant') -
-mimics bursty sensor/event traffic for the Temporal Analysis task,
-'periodic_burst' (alternates between the base `rate` and a much higher
-`burst_rate` for `burst_duration` seconds every `burst_interval` seconds),
-or 'ramp' (the effective rate increases linearly from `ramp_start_rate` to
-`ramp_end_rate` over `ramp_duration` seconds, then holds at `ramp_end_rate`).
+Supported sending patterns:
+- 'constant': Steady, fixed interval between publishes.
+- 'random': Mimics bursty sensor/event traffic using Poisson-distributed intervals.
+- 'periodic_burst': Alternates between a base rate and heavy spikes.
+- 'ramp': Linearly increases the rate over time (for the ramping task).
 
-Exposes a small REST API so the Traffic Controller can start/stop/reconfigure
-this generator at runtime and read its live statistics.
+Control & Metrics:
+Exposes a lightweight REST API so the Traffic Controller can start, stop, and reconfigure 
+the generator on the fly, as well as read its live statistics.
 """
 
 import os, time, threading, random, string
@@ -68,7 +62,7 @@ def _topic_list(n: int) -> list[str]:
     return BASE_TOPICS + [f"load/topic-{i}" for i in range(len(BASE_TOPICS), n)]
 
 
-# ── Generator state ───────────────────────────────────────────────────────────
+# Generator state
 
 state = {
     "running":      False,
@@ -116,7 +110,7 @@ _history: list[dict] = []
 _subscribed_topics: set[str] = set()
 
 
-# ── Models (Swagger) ────────────────────────────────────────────────────────
+# Models (Swagger)
 
 class GeneratorConfig(BaseModel):
     """Configurable parameters. All fields optional; only provided keys are updated."""
@@ -245,7 +239,7 @@ def _normalize_qos_distribution(value):
     return [float(w) for w in value]
 
 
-# ── MQTT client setup ─────────────────────────────────────────────────────────
+# MQTT client setup
 
 mqtt_client = mqtt.Client(client_id="gen-mqtt")
 
@@ -302,7 +296,7 @@ def _connect_with_retry():
 threading.Thread(target=_connect_with_retry, daemon=True).start()
 
 
-# ── Traffic generation loop ───────────────────────────────────────────────────
+# Traffic generation loop
 
 def _is_burst_active(pattern: str, burst_duration: float, burst_interval: float) -> bool:
     """Returns True if, for pattern='periodic_burst', the current moment falls inside
@@ -485,7 +479,7 @@ threading.Thread(target=_send_loop,   daemon=True).start()
 threading.Thread(target=_metrics_loop, daemon=True).start()
 
 
-# ── REST API ──────────────────────────────────────────────────────────────────
+# REST API
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")

@@ -1,25 +1,20 @@
 """
 QUIC / HTTP/3 Traffic Generator
 ---------------------------------
-Sends HTTP/3 POST requests with a configurable payload over QUIC using
-aioquic. Uses a self-signed certificate from the QUIC target server
-(no verification).
+Sends HTTP/3 POST requests with a configurable payload over QUIC using aioquic (disabling SSL verification for self-signed certs).
 
-Request rate, payload size (bytes sent as the HTTP/3 request body), the
-number of concurrently multiplexed streams per cycle, and 0-RTT session
-resumption are all configurable at runtime.
+Key parameters like request rate, payload size, concurrent multiplexed streams per cycle, 
+and 0-RTT session resumption can be dynamically configured at runtime.
 
-The overall sending cadence is controlled by `pattern`: 'constant' (fixed
-1/rate interval between cycles), 'random' (exponentially-distributed/
-Poisson gaps between cycles, with the same mean rate as 'constant') - useful
-for the Temporal Analysis task, 'periodic_burst' (alternates between the
-base `rate` and a much higher `burst_rate` for `burst_duration` seconds
-every `burst_interval` seconds, all on the same already-open connection), or
-'ramp' (the effective rate increases linearly from `ramp_start_rate` to
-`ramp_end_rate` over `ramp_duration` seconds, then holds at `ramp_end_rate`).
+Supported sending patterns:
+- 'constant': Steady, fixed interval between cycles.
+- 'random': Mimics bursty traffic using Poisson-distributed intervals (for temporal analysis).
+- 'periodic_burst': Alternates between a base rate and heavy spikes over the same active connection.
+- 'ramp': Linearly increases the rate over time (for the ramping task).
 
-Exposes a small REST API so the Traffic Controller can start/stop/reconfigure
-this generator at runtime and read its live statistics.
+Control & Metrics:
+Exposes a lightweight REST API so the Traffic Controller can start, stop, and reconfigure 
+the generator on the fly, as well as read its live statistics.
 """
 
 import os, sys, time, asyncio, threading, ssl, random
@@ -95,7 +90,7 @@ def _on_session_ticket(ticket):
     _session_ticket = ticket
 
 
-# ── Silence a known aioquic/H3 cosmetic issue ───────────────────────────────
+# Silence a known aioquic/H3 cosmetic issue
 # When an HTTP/3 connection closes, aioquic's asyncio adapter may still hold
 # StreamWriter objects for *peer-initiated unidirectional* streams (e.g. the
 # server's QPACK encoder/decoder streams). Their __del__ tries to send a FIN
@@ -121,7 +116,7 @@ def _quiet_aioquic_unraisablehook(unraisable):
 sys.unraisablehook = _quiet_aioquic_unraisablehook
 
 
-# ── Models (Swagger) ────────────────────────────────────────────────────────
+# Models (Swagger)
 
 class GeneratorConfig(BaseModel):
     """Configurable parameters. All fields optional; only provided keys are updated."""
@@ -238,7 +233,7 @@ class OkResponse(BaseModel):
 _READONLY_FIELDS = {"zero_rtt_used"}
 
 
-# ── QUIC send using aioquic ─────────────────────────────────────────────────
+# QUIC send using aioquic
 #
 # Design note on connection reuse:
 # A QUIC connection starts with a TLS 1.3 handshake, which costs at least one
@@ -503,7 +498,7 @@ def _run_background():
 threading.Thread(target=_run_background, daemon=True).start()
 
 
-# ── REST API ──────────────────────────────────────────────────────────────────
+# REST API
 
 @app.post("/start", response_model=OkResponse, summary="Start generating traffic",
           description="Starts the generator and optionally applies an initial configuration (same fields as PATCH /config).")

@@ -1,20 +1,3 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: DEMO SHOWCASE                                            ║
-# ║  Designed for live professor presentation — ~7 minutes total               ║
-# ║                                                                            ║
-# ║  Each phase has ONE clear idea visible in the Wireshark I/O graph.         ║
-# ║  Say the phase name out loud as you switch — it tells the story.           ║
-# ║                                                                            ║
-# ║  Timeline:                                                                 ║
-# ║    00:00  Warmup   (15 s)  — rates ramp up from 0                         ║
-# ║    00:15  Phase 1  (60 s)  — even multi-protocol baseline                 ║
-# ║    01:15  Phase 2  (60 s)  — HTTP/2 multiplexing burst                    ║
-# ║    02:15  Phase 3  (60 s)  — MQTT QoS ladder (0 → 1 → 2)                 ║
-# ║    03:15  Phase 4  (75 s)  — Fault injection + resilience                 ║
-# ║    04:30  Phase 5  (75 s)  — Adaptive Control reacts live                 ║
-# ║    05:45  Cooldown (15 s)  — rates ramp down                              ║
-# ║    06:00  END                                                              ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
 
 global:
   duration: 360          # 6 min active traffic
@@ -23,10 +6,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Multi-Protocol Baseline ─────────────────────────────────────────
-  # What to say: "Here you can see all four protocols side by side at equal load.
-  #               In Wireshark the bars are roughly the same height — balanced."
-  # What to show: Overview tab → all 4 generator cards active
+  # Phase 1: Multi-Protocol Baseline
   - name: multi_protocol_baseline
     duration: 60
     description: >
@@ -65,11 +45,7 @@ phases:
         rate: 10
         packet_size: 256
 
-  # ── Phase 2: HTTP/2 Burst (Multiplexing in Action) ───────────────────────────
-  # What to say: "Watch the Wireshark graph — every 20 seconds HTTP/2 spikes to
-  #               8x its base rate. This is HTTP/2 stream multiplexing under load:
-  #               many requests over a single TLS connection."
-  # What to show: Analysis tab → HTTP/2 sparkline; Wireshark port 8443 filter
+  # Phase 2: HTTP/2 Burst (Multiplexing in Action) 
   - name: http2_multiplexing_burst
     duration: 60
     description: >
@@ -102,12 +78,7 @@ phases:
       udp:
         rate: 5
 
-  # ── Phase 3: MQTT QoS Ladder ─────────────────────────────────────────────────
-  # What to say: "QoS 0 = fire and forget, one packet per message.
-  #               QoS 2 = exactly once delivery, FOUR packets per message.
-  #               At the same publish rate (40 msg/s), QoS 2 generates 4× the
-  #               traffic. Watch the Wireshark packet count jump."
-  # What to show: Generator > MQTT tab; Wireshark filter: mqtt
+  # Phase 3: MQTT QoS Ladder
   - name: mqtt_qos_ladder
     duration: 60
     description: >
@@ -138,13 +109,7 @@ phases:
         rate: 5
         mode: normal
 
-  # ── Phase 4: Fault Injection — Resilience Test ───────────────────────────────
-  # What to say: "We inject 20% artificial failures into HTTP/2 and QUIC.
-  #               The system keeps running — the error-rate cards go red.
-  #               This simulates packet loss or a flaky upstream service."
-  # What to show: Fault Injection tab → fault sliders; Overview error column
-  # NOTE: You can also drag the fault sliders manually in the dashboard for
-  #       a live demo effect. This phase sets a moderate baseline.
+  # Phase 4: Fault Injection — Resilience Test
   - name: fault_injection_resilience
     duration: 75
     description: >
@@ -177,14 +142,7 @@ phases:
       udp:
         rate: 10
 
-  # ── Phase 5: Adaptive Control ─────────────────────────────────────────────────
-  # What to say: "Adaptive Control is now active. The controller checks error
-  #               rates and latency every 5 seconds. If both are low it scales
-  #               UP by ×1.2; if errors exceed 5% it scales DOWN by ×0.5.
-  #               Watch the multiplier column in the Adaptive tab move live."
-  # What to show: Adaptive Control tab → multiplier column reacts
-  # TIP: While this phase runs, go to Fault Injection and push HTTP/2 fault_rate
-  #      to 30% — the controller will scale HTTP/2 down within 5–10 seconds.
+  # Phase 5: Adaptive Control
   - name: adaptive_control_live
     duration: 75
     description: >

@@ -1,10 +1,5 @@
 # Traffic Profile: HTTP/2 Dominant
 # Shows: HTTP/2 multiplexing under load, periodic bursts visible in the I/O graph
-#
-# Phase order is deliberate for the test cases in the lab report:
-#   T2 (Temporal Analysis): load this profile, start, capture 120 s immediately.
-#   http2_burst is first so burst peaks (~30 s apart, 5 s wide) are visible
-#   within that 120 s window (warmup 15 s + burst phase 120 s = 135 s total).
 
 global:
   duration: 300       # total duration 5 minutes
@@ -12,10 +7,7 @@ global:
   cooldown: 15        # 15 sec cooldown phase
 
 phases:
-  # ── Phase 1: periodic burst ── T2 target, runs at 15 s – 135 s after start ──
-  # Start a Wireshark capture immediately after `curl … /start` and capture for
-  # 120 s; you will see 3–4 burst spikes at 30 s intervals (burst_interval=30,
-  # burst_duration=5) with HTTP/2 rate jumping 8× from 50 → 400 req/s.
+  # Phase 1: periodic burst
   - name: http2_burst
     duration: 120
     adaptive_control:
@@ -54,7 +46,7 @@ phases:
         rate: 5
         mode: normal
 
-  # ── Phase 2: HTTP/2 baseline (dominant, constant) ─────────────────────────
+  #  Phase 2: HTTP/2 baseline (dominant, constant) 
   - name: http2_dominant
     duration: 60
     protocols:
@@ -79,7 +71,7 @@ phases:
       udp:
         rate: 2
 
-  # ── Phase 3: linear ramp ("ramping" sending pattern) ──────────────────────
+  # Phase 3: linear ramp ("ramping" sending pattern)
   - name: http2_ramp
     duration: 60
     description: >
@@ -105,7 +97,7 @@ phases:
         rate: 5
         qos: 0
 
-  # ── Phase 4: cooldown ─────────────────────────────────────────────────────
+  # Phase 4: cooldown
   - name: cooldown_phase
     duration: 60
     protocols:

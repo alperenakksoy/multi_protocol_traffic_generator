@@ -4,7 +4,7 @@
 # Tests every curl command used in the Wireshark Test Preparation section.
 # Run this AFTER docker-compose up -d and all containers are healthy.
 #
-# Usage:ooo
+# Usage:
 #   chmod +x test_endpoints.sh
 #   ./test_endpoints.sh
 #

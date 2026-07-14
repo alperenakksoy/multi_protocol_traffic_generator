@@ -1,6 +1,5 @@
-# ─────────────────────────────────────────────────────────────────────────────
 # Multi-Machine Deployment — MACHINE B (Targets + Metrics + Broker + Analyzers)
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Run this on the SECOND lab machine (works for both 2-machine and 3-machine
 # setups — Machine B is always the target machine).
 #
@@ -22,7 +21,6 @@
 # capture real inter-machine traffic on the physical network interface.
 # They push data to the metrics service on this machine; the dashboard on
 # Machine A reads aggregated results via GET http://<B_IP>:9090/analysis.
-# ─────────────────────────────────────────────────────────────────────────────
 
 networks:
   mic-net-b:
@@ -79,10 +77,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # In the single-machine setup, target-tcpudp has NO exposed port (it's only
-  # reached via the shared mic-net bridge). For multi-machine deployment it
-  # MUST be exposed, since Machine A's gen-tcpudp reaches it over the real
-  # network rather than a shared Docker network.
   target-tcpudp:
     build: ./targets/tcpudp_sink
     container_name: target-tcpudp
@@ -91,12 +85,6 @@ services:
       - "9999:9999"
       - "9999:9999/udp"
     restart: unless-stopped
-
-  # ── Network Analyzers (packet-capture sidecars) ───────────────────────────
-  # Each analyzer shares its target's network namespace so it sees real
-  # inter-machine frames on eth0 — the physical link, not a Docker bridge.
-  # They push live protocol statistics to the metrics service on this machine.
-  # The dashboard on Machine A polls GET http://<B_IP>:9090/analysis for them.
 
   analyzer-http2:
     build: ./analyzer
