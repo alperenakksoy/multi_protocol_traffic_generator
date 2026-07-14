@@ -157,13 +157,7 @@ services:
       - "3000:3000"
     restart: unless-stopped
 
-  # Network Analyzers (live packet-capture sidecars). Each shares one target
-  # container's network namespace (network_mode: "service:<target>") instead of
-  # sniffing the mic-net bridge directly, since Docker Desktop on macOS/Windows
-  # exposes no host-visible bridge interface (see docs/WIRESHARK_GUIDE.md) - this
-  # works identically on macOS and Linux. Each analyzer only sees its own
-  # target's traffic; the Metrics Collector sums all of them into one live
-  # picture (GET /analysis on :9090), exposed through the dashboard.
+  # Network Analyzers (live packet-capture sidecars), each shares one target
   analyzer-http2:
     build: ./analyzer
     container_name: analyzer-http2

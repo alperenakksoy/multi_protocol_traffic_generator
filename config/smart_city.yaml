@@ -1,17 +1,12 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: SMART CITY                                               ║
-# ║  Multi-protocol mix modelling a city-scale IoT + control infrastructure.   ║
-# ║                                                                            ║
-# ║  Real-world use case: traffic lights, parking sensors, energy meters,      ║
-# ║  emergency services, and the city web portal — all on one network stack.  ║
-# ║                                                                            ║
-# ║  Key insights:                                                             ║
-# ║    • Each protocol carries a different city sub-system                     ║
-# ║    • MQTT: sensor grid (lights, parking, air quality)                      ║
-# ║    • HTTP/2: citizen portal + data API                                     ║
-# ║    • QUIC: emergency-services video feeds (low-latency, loss-tolerant)     ║
-# ║    • TCP/UDP: bulk meter-reading uploads (nightly batch)                   ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# Traffic Profile: SMART CITY
+# Multi-protocol mix modelling a city-scale IoT + control infrastructure.
+# Real-world use case: traffic lights, parking sensors, energy meters, emergency services, and the city web portal — all on one network stack.
+# Key insights:
+# Each protocol carries a different city sub-system
+# MQTT: sensor grid (lights, parking, air quality)
+# HTTP/2: citizen portal + data API
+# QUIC: emergency-services video feeds (low-latency, loss-tolerant)
+# TCP/UDP: bulk meter-reading uploads (nightly batch)
 
 global:
   warmup:   15
@@ -19,7 +14,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Day Mode — City Running Normally ─────────────────────────────
+  # Phase 1: Day Mode — City Running Normally
   - name: day_normal_ops
     duration: 60
     description: >
@@ -61,7 +56,7 @@ phases:
         rate: 3
         packet_size: 512
 
-  # ── Phase 2: Rush Hour (08:00 / 17:00 Surge) ─────────────────────────────
+  # Phase 2: Rush Hour (08:00 / 17:00 Surge)
   - name: rush_hour
     duration: 60
     description: >
@@ -106,7 +101,7 @@ phases:
         rate: 5
         packet_size: 512
 
-  # ── Phase 3: Emergency Event (Fault + Overload) ────────────────────────────
+  # Phase 3: Emergency Event (Fault + Overload)
   - name: emergency_event
     duration: 60
     description: >
@@ -149,7 +144,7 @@ phases:
         rate: 8
         packet_size: 1400
 
-  # ── Phase 4: Night Mode + Adaptive Maintenance Window ─────────────────────
+  # Phase 4: Night Mode + Adaptive Maintenance Window
   - name: night_adaptive
     duration: 75
     description: >

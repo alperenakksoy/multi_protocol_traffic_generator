@@ -1,15 +1,13 @@
-# ─────────────────────────────────────────────────────────────────────────────
 # Multi-Machine Deployment — MACHINE A / A1 (Controller + Dashboard + Generators)
-# ─────────────────────────────────────────────────────────────────────────────
 # 2-MACHINE setup (Machine A + Machine B):
-#   All 4 generators, controller, and dashboard run here.
-#   Machine B runs docker-compose.targets.yml (targets + broker + metrics + analyzers).
+# All 4 generators, controller, and dashboard run here.
+# Machine B runs docker-compose.targets.yml (targets + broker + metrics + analyzers).
 #
 # 3-MACHINE setup (Machine A1 + Machine A2 + Machine B):
-#   This machine runs gen-http2 + gen-quic + controller + dashboard.
-#   Machine A2 runs docker-compose.generators2.yml (gen-mqtt + gen-tcpudp).
-#   Machine B runs docker-compose.targets.yml as usual.
-#   Set MACHINE_A2_IP in .env so the controller can reach Machine A2's generators.
+# This machine runs gen-http2 + gen-quic + controller + dashboard.
+# Machine A2 runs docker-compose.generators2.yml (gen-mqtt + gen-tcpudp).
+# Machine B runs docker-compose.targets.yml as usual.
+# Set MACHINE_A2_IP in .env so the controller can reach Machine A2s generators.
 #
 # Usage:
 #   1. Start Machine B first (docker-compose.targets.yml up --build)
@@ -20,9 +18,7 @@
 #        # MACHINE_A2_IP=192.168.1.43
 #   4. docker-compose -f docker-compose.generators.yml up --build
 #
-# Wireshark: capture on the PHYSICAL interface (not docker0/br-*) to see
-# genuine inter-machine frames with real host IPs.
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 networks:
   mic-net-a:

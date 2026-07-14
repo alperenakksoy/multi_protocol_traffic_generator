@@ -1,16 +1,12 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: IoT SENSOR FARM                                          ║
-# ║  Simulates hundreds of embedded sensors reporting over MQTT.                ║
-# ║                                                                            ║
-# ║  Real-world use case: industrial sensor grid (factory floor, warehouse,    ║
-# ║  smart agriculture) where devices send readings at fixed intervals.        ║
-# ║                                                                            ║
-# ║  Key insight for the demo:                                                 ║
-# ║    • Phase 1: steady "heartbeat" at low QoS (fire-and-forget readings)     ║
-# ║    • Phase 2: burst when a shift starts — many devices wake up at once     ║
-# ║    • Phase 3: critical alarm path uses QoS 2 (exactly-once delivery)       ║
-# ║    • In Wireshark: filter on `mqtt` — watch packet counts jump in Phase 2  ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# Traffic Profile: IoT SENSOR FARM
+# Simulates hundreds of embedded sensors reporting over MQTT.
+# Real-world use case: industrial sensor grid (factory floor, warehouse, smart agriculture) where devices send readings at fixed intervals.
+# Key insight for the demo:
+# Phase 1: steady "heartbeat" at low QoS (fire-and-forget readings)
+# Phase 2: burst when a shift starts — many devices wake up at once
+# Phase 3: critical alarm path uses QoS 2 (exactly-once delivery)
+# In Wireshark: filter on `mqtt` — watch packet counts jump in Phase 2
+
 
 global:
   warmup:   10
@@ -18,7 +14,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Steady Heartbeat ─────────────────────────────────────────────
+  #  Phase 1: Steady Heartbeat 
   - name: steady_heartbeat
     duration: 60
     description: >
@@ -45,7 +41,7 @@ phases:
         packet_size: 128
         mode: normal
 
-  # ── Phase 2: Morning Shift Surge ──────────────────────────────────────────
+  # Phase 2: Morning Shift Surge
   - name: shift_startup_burst
     duration: 60
     description: >
@@ -73,7 +69,7 @@ phases:
         rate: 3
         mode: normal
 
-  # ── Phase 3: Critical Alarm Path (QoS 2) ──────────────────────────────────
+  # Phase 3: Critical Alarm Path (QoS 2)
   - name: alarm_qos2
     duration: 60
     description: >
@@ -98,7 +94,7 @@ phases:
         rate: 2
         mode: normal
 
-  # ── Phase 4: Adaptive Fleet Scaling ───────────────────────────────────────
+  # Phase 4: Adaptive Fleet Scaling
   - name: adaptive_fleet
     duration: 75
     description: >

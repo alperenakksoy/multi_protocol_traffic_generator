@@ -20,7 +20,7 @@ from fastapi import FastAPI, Body, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
-# ── OpenAPI metadata ─────────────────────────────────────────────────────────
+# OpenAPI metadata
 
 tags_metadata = [
     {
@@ -67,7 +67,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# Config
 
 GENERATORS = {
     "gen-http2":  os.getenv("GEN_HTTP2_URL",  "http://gen-http2:7001"),
@@ -92,7 +92,7 @@ RATE_FIELDS = {
     "gen-tcpudp": ["tcp_rate", "udp_rate"],
 }
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# State
 
 state: dict[str, Any] = {
     "running":         False,
@@ -122,7 +122,7 @@ def _log(message: str, level: str = "info", source: str = "controller"):
     print(f"[{entry['time']}] [{source}] {message}")
 
 
-# ── Pydantic models (for Swagger / OpenAPI) ─────────────────────────────────────
+# Pydantic models (for Swagger / OpenAPI)
 
 class OkResponse(BaseModel):
     ok: bool = True
@@ -205,7 +205,7 @@ class AdaptiveToggleResponse(BaseModel):
     enabled: bool
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# Helpers
 
 async def _call(method: str, url: str, **kwargs) -> dict:
     try:
@@ -226,33 +226,20 @@ def _load_yaml(profile: str) -> dict:
 
 async def _ramp_rates(configs: dict[str, dict], duration: float, direction: str, label: str):
     """
-    Linearly ramps the rate field(s) (per RATE_FIELDS) of `configs` from 0 up to
-    their target values (direction='up'), or from their target values down to 0
-    (direction='down'), over `duration` seconds, via periodic PATCH /config calls.
+    Linearly ramps rate fields (defined in RATE_FIELDS) of `configs` from 0 to target values 
+    (direction='up') or back to 0 (direction='down') over `duration` seconds using periodic PATCH requests.
 
-    This implements the global `warmup`/`cooldown` periods: every generator's
-    rate climbs from/to 0 once, at the very start/end of an entire profile run.
+    This handles the global warmup/cooldown phases: all generators scale their rate 
+    from/to 0 at the very start and end of a profile run.
 
-    This is distinct from each generator's own pattern='ramp' sending pattern
-    (see e.g. generators/http2/generator.py): that one ramps a single
-    generator's rate between two arbitrary values (ramp_start_rate ->
-    ramp_end_rate) for the duration of whichever phase requests it, computed
-    entirely inside the generator from a wall-clock anchor, with no PATCH
-    polling from here required. The two mechanisms can run independently:
-    a phase using pattern='ramp' for one protocol is unaffected by this
-    function, since _phase_to_gen_configs simply forwards ramp_start_rate/
-    ramp_end_rate/ramp_duration/pattern through to that generator's config
-    like any other field, and this function only touches RATE_FIELDS
-    ("rate", "tcp_rate", "udp_rate") - not the ramp_* fields. Note, however,
-    that if warmup/cooldown ramps the generic `rate` field on a generator
-    that is *currently* in pattern='ramp' mode, that PATCH has no visible
-    effect, since the generator ignores `rate` in favor of ramp_start_rate/
-    ramp_end_rate while pattern='ramp' is active; the generator's own ramp
-    still runs to completion based on its phase duration.
-
-    Non-rate fields in `configs` (payload size, mode, etc.) are left untouched here -
-    callers apply those separately via the normal phase config, since only the rate
-    fields need to change gradually.
+    How it differs from a generator's own pattern='ramp':
+    - Global Ramp (this function): Gradually updates RATE_FIELDS ("rate", "tcp_rate", "udp_rate") 
+    via external PATCH polling. Non-rate fields (payload size, modes, etc.) are left untouched.
+    - Generator Ramp (pattern='ramp'): Handled internally by the generator itself using a wall-clock anchor, 
+    scaling between arbitrary start/end rates.
+    - Interaction: They can run independently. However, if this function patches the generic `rate` 
+    field of a generator currently running in pattern='ramp' mode, the PATCH has no effect because 
+    the generator ignores the standard `rate` field during its internal ramp.
     """
     targets: dict[str, dict[str, float]] = {}
     for name, cfg in configs.items():
@@ -359,7 +346,7 @@ def _phase_to_gen_configs(phase: dict) -> dict[str, dict]:
     }
 
 
-# ── Adaptive Control (autonomous rate scaling) ──────────────────────────────────
+# Adaptive Control (autonomous rate scaling)
 
 async def _get_current_rates() -> dict[str, dict[str, float]]:
     """Read each generator's current rate value(s) to use as the adaptive baseline."""
@@ -377,26 +364,22 @@ async def _adaptive_loop(adaptive_cfg: dict):
     """
     Autonomous control loop.
 
-    Every `check_interval` seconds, reads each generator's `error_rate` from
-    GET /metrics (errors as a fraction of total attempts - errors + packets_sent -
-    computed once in metrics/collector.py so the dashboard and Adaptive Control
-    always agree on the same number; see _error_rate() there for why dividing by
-    packets_sent alone is wrong). If the error rate is at or below
-    `scale_up_threshold.error_rate_max`, the generator's rate is scaled up by
-    `scale_up_factor`. If it is at or above `scale_down_threshold.error_rate_min`,
-    the rate is scaled down by `scale_down_factor`. Otherwise the rate is held.
+    Every `check_interval` seconds, reads each generator's `error_rate` from GET /metrics 
+    (calculated consistently with the dashboard as error_count / (errors + packets_sent)).
 
-    `scale_up_threshold.latency_max_ms` / `scale_down_threshold.latency_min_ms` are
-    also honoured for generators that report a `latency_ms` stat (currently
-    gen-http2 and gen-tcpudp).
+    Scaling logic:
+    - Scale Up: If error_rate <= `scale_up_threshold.error_rate_max`, scales up the rate by `scale_up_factor`.
+    - Scale Down: If error_rate >= `scale_down_threshold.error_rate_min`, scales down the rate by `scale_down_factor`.
+    - Hold: Otherwise, keeps the current rate.
 
-    Note: this loop scales the generic rate field(s) in RATE_FIELDS (rate /
-    tcp_rate / udp_rate). If a generator is currently running pattern='ramp',
-    it computes its own effective rate from ramp_start_rate/ramp_end_rate
-    instead of the generic rate field, so a PATCH applied here has no visible
-    effect on that generator until its phase's pattern changes away from
-    'ramp'. This mirrors the same pre-existing interaction with the global
-    warmup/cooldown ramp (see _ramp_rates).
+    Latenz-guided scaling:
+    - Respects `scale_up_threshold.latency_max_ms` and `scale_down_threshold.latency_min_ms` 
+    for generators reporting latency metrics (currently gen-http2 and gen-tcpudp).
+
+    Note:
+    This loop scales generic RATE_FIELDS ("rate", "tcp_rate", "udp_rate"). If a generator is 
+    currently running in pattern='ramp' mode, the PATCH calls here will have no effect because 
+    the generator ignores the generic rate field in favor of its internal ramp parameters.
     """
     check_interval = adaptive_cfg.get("check_interval", 10)
     up_cfg   = adaptive_cfg.get("scale_up_threshold", {})
@@ -512,7 +495,7 @@ def _stop_adaptive():
     state["adaptive_enabled"] = False
 
 
-# ── Phase runner (background task) ────────────────────────────────────────────
+# Phase runner (background task)
 
 async def _run_phases(profile_data: dict):
     global_cfg = profile_data.get("global", {})
@@ -597,7 +580,7 @@ async def _run_phases(profile_data: dict):
     )
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
+# Endpoints
 
 @app.post(
     "/start",

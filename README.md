@@ -12,10 +12,10 @@
 - [x] Configurable traffic patterns (3+ YAML profiles, ramp/burst/random)
 - [x] Dashboard for live control and monitoring
 - [x] Report (Related Work)
-- [ ] Multi-Machine-Test / (Lab)
-- [ ] Wireshark captures
-- [ ] System Evaluation
-- [ ] Live demo rehearsal
+- [x] Multi-Machine-Test / (Lab)
+- [x] Wireshark captures
+- [x] System Evaluation
+- [x] Live demo rehearsal
 
 ---
 
@@ -99,19 +99,21 @@ docker-compose up
 
 ## Container Overview
 
-| Container | Image | Port | Role |
-|---|---|---|---|
-| `controller` | Python + FastAPI | 8000 | Reads YAML, controls generators, REST API |
-| `dashboard` | Static HTML/JS served via Python `http.server` | 3000 | Live dashboard for the demo |
-| `gen-http2` | Python + httpx | - | HTTP/2 GET/POST to `target-http2` |
-| `gen-quic` | Python + aioquic | - | QUIC/HTTP/3 requests to `target-quic` |
-| `gen-mqtt` | Python + paho-mqtt | - | MQTT publish/subscribe via Mosquitto |
-| `gen-tcpudp` | Python (raw `socket`s, TCP + UDP) | - | Raw TCP/UDP, normal + stealth mode, constant/periodic-burst/random patterns |
-| `target-http2` | Hypercorn + FastAPI | 8080 | HTTP/2 server |
-| `target-quic` | aioquic | 4433 | QUIC server |
-| `mosquitto` | Eclipse Mosquitto | 1883 | MQTT broker |
-| `metrics` | Python + Flask | 9090 | Aggregates stats from all generators + analyzers |
-| `analyzer-http2`, `analyzer-quic`, `analyzer-mqtt`, `analyzer-tcpudp` | Python + `tshark` | - | Live packet-capture sidecars (one per target's network namespace); real protocol distribution + I/O graph, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#8-network-analyzer-analyzer) |
+
+| Container                                                             | Image                                          | Port | Role                                                                                                                                                                                      |
+| --------------------------------------------------------------------- | ---------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `controller`                                                          | Python + FastAPI                               | 8000 | Reads YAML, controls generators, REST API                                                                                                                                                 |
+| `dashboard`                                                           | Static HTML/JS served via Python `http.server` | 3000 | Live dashboard for the demo                                                                                                                                                               |
+| `gen-http2`                                                           | Python + httpx                                 | -    | HTTP/2 GET/POST to `target-http2`                                                                                                                                                         |
+| `gen-quic`                                                            | Python + aioquic                               | -    | QUIC/HTTP/3 requests to `target-quic`                                                                                                                                                     |
+| `gen-mqtt`                                                            | Python + paho-mqtt                             | -    | MQTT publish/subscribe via Mosquitto                                                                                                                                                      |
+| `gen-tcpudp`                                                          | Python (raw `socket`s, TCP + UDP)              | -    | Raw TCP/UDP, normal + stealth mode, constant/periodic-burst/random patterns                                                                                                               |
+| `target-http2`                                                        | Hypercorn + FastAPI                            | 8080 | HTTP/2 server                                                                                                                                                                             |
+| `target-quic`                                                         | aioquic                                        | 4433 | QUIC server                                                                                                                                                                               |
+| `mosquitto`                                                           | Eclipse Mosquitto                              | 1883 | MQTT broker                                                                                                                                                                               |
+| `metrics`                                                             | Python + Flask                                 | 9090 | Aggregates stats from all generators + analyzers                                                                                                                                          |
+| `analyzer-http2`, `analyzer-quic`, `analyzer-mqtt`, `analyzer-tcpudp` | Python + `tshark`                              | -    | Live packet-capture sidecars (one per target's network namespace); real protocol distribution + I/O graph, see `[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#8-network-analyzer-analyzer)` |
+
 
 ---
 
@@ -196,26 +198,28 @@ curl -X POST http://localhost:8000/config/load \
   -d '{"profile": "mqtt_heavy"}'
 ```
 
-See [`config/`](config/) for all profiles and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full configuration schema.
+See `[config/](config/)` for all profiles and `[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)` for the full configuration schema.
 
 ---
 
 ## Controller REST API
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/start?profile=<name>` | Loads a YAML profile and starts the full phase/warmup/cooldown run |
-| `POST` | `/stop` | Stops the phase runner, Adaptive Control, and all generators |
-| `POST` | `/config/load` | Sets the active profile (applies phase 1 immediately if running) |
-| `PATCH` | `/generator/{name}` | Forwards arbitrary key/value overrides to one generator (e.g. `{"rate": 80}`) |
-| `POST` | `/generator/{name}/start` | Starts a single generator without affecting the others |
-| `POST` | `/generator/{name}/stop` | Stops a single generator without affecting the others |
-| `GET` | `/status` | Full system status: running/phase/ramp state, all generators' live status, aggregated metrics, last 50 log entries |
-| `GET` | `/profiles` | Lists available YAML profiles in `config/` |
-| `GET` | `/log` | Full timestamped configuration/adaptive-control log |
-| `GET` | `/adaptive/status` | Current Adaptive Control state and last decision per generator |
-| `POST` | `/adaptive/toggle?enabled=<bool>` | Manually enables/disables Adaptive Control, independent of the active profile |
-| `GET` | `/health` | Liveness check |
+
+| Method  | Endpoint                          | Description                                                                                                        |
+| ------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `POST`  | `/start?profile=<name>`           | Loads a YAML profile and starts the full phase/warmup/cooldown run                                                 |
+| `POST`  | `/stop`                           | Stops the phase runner, Adaptive Control, and all generators                                                       |
+| `POST`  | `/config/load`                    | Sets the active profile (applies phase 1 immediately if running)                                                   |
+| `PATCH` | `/generator/{name}`               | Forwards arbitrary key/value overrides to one generator (e.g. `{"rate": 80}`)                                      |
+| `POST`  | `/generator/{name}/start`         | Starts a single generator without affecting the others                                                             |
+| `POST`  | `/generator/{name}/stop`          | Stops a single generator without affecting the others                                                              |
+| `GET`   | `/status`                         | Full system status: running/phase/ramp state, all generators' live status, aggregated metrics, last 50 log entries |
+| `GET`   | `/profiles`                       | Lists available YAML profiles in `config/`                                                                         |
+| `GET`   | `/log`                            | Full timestamped configuration/adaptive-control log                                                                |
+| `GET`   | `/adaptive/status`                | Current Adaptive Control state and last decision per generator                                                     |
+| `POST`  | `/adaptive/toggle?enabled=<bool>` | Manually enables/disables Adaptive Control, independent of the active profile                                      |
+| `GET`   | `/health`                         | Liveness check                                                                                                     |
+
 
 Full interactive documentation (all 5 services, request/response schemas): open `docs/api/swagger.html` in a browser, or run any service and visit its own `/docs` (FastAPI's built-in Swagger UI).
 
@@ -235,7 +239,7 @@ Two extra Compose files split the system across 2 lab machines. `captures/captur
 ./captures/capture_05_multisystem.sh generators <MACHINE_B_IP>
 ```
 
-It builds/starts the right Compose file on each side, wires up `TARGET_B_IP` automatically, starts traffic on Machine A, and captures 70s on Machine B's **physical** interface (not `docker0`/`br-*`) to see genuine inter-machine traffic — saved as `captures/05_multisystem_<hostname>.pcapng`. See [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md) (Capture 5) for the full walkthrough.
+It builds/starts the right Compose file on each side, wires up `TARGET_B_IP` automatically, starts traffic on Machine A, and captures 70s on Machine B's **physical** interface (not `docker0`/`br-`*) to see genuine inter-machine traffic — saved as `captures/05_multisystem_<hostname>.pcapng`. See `[docs/WIRESHARK_GUIDE.md](docs/WIRESHARK_GUIDE.md)` (Capture 5) for the full walkthrough.
 
 ---
 
@@ -244,51 +248,47 @@ It builds/starts the right Compose file on each side, wires up `TARGET_B_IP` aut
 The TCP/UDP generator has two modes:
 
 **Normal Mode**: a fixed fingerprint, immediately recognizable in Wireshark:
+
 - Packet size: always 512 bytes
 - Interval: always 100ms
 
 **Stealth Mode**: no recognizable pattern:
+
 - Packet size: random, 64-1400 bytes
 - Interval: Poisson-distributed (mean = 100ms)
 
-The result is directly visible in Wireshark; see [`docs/STEALTH_MODE.md`](docs/STEALTH_MODE.md).
+The result is directly visible in Wireshark; see `[docs/STEALTH_MODE.md](docs/STEALTH_MODE.md)`.
 
 ---
 
 ## Wireshark Captures
 
-Five captures need to be created. The exact step-by-step instructions for each capture are in [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md).
+Five captures need to be created. The exact step-by-step instructions for each capture are in `[docs/WIRESHARK_GUIDE.md](docs/WIRESHARK_GUIDE.md)`.
 
-| # | Task | Duration | What to show |
-|---|---|---|---|
-| 1 | Protocol Distribution | 60 sec | Protocol Hierarchy screenshot |
-| 2 | Temporal Analysis | 120 sec | I/O graph with burst phases |
-| 3 | Behavioral Fingerprinting | 60 sec | Normal vs. stealth packet sizes |
-| 4 | Failure Visibility | 30 sec | TCP RST / MQTT disconnect |
-| 5 | Multi-Machine | 60 sec | Inter-machine link traffic |
+
+| #   | Task                      | Duration | What to show                    |
+| --- | ------------------------- | -------- | ------------------------------- |
+| 1   | Protocol Distribution     | 60 sec   | Protocol Hierarchy screenshot   |
+| 2   | Temporal Analysis         | 120 sec  | I/O graph with burst phases     |
+| 3   | Behavioral Fingerprinting | 60 sec   | Normal vs. stealth packet sizes |
+| 4   | Failure Visibility        | 30 sec   | TCP RST / MQTT disconnect       |
+| 5   | Multi-Machine             | 60 sec   | Inter-machine link traffic      |
+
 
 ---
 
 ## Grading Map
 
-| Criterion | Weight | How it is fulfilled |
-|---|---|---|
-| System completeness | 25% | All 15 containers run with `docker-compose up` |
-| Configuration flexibility | 15% | 3 YAML profiles plus runtime changes via API |
-| Traffic analysis depth | 25% | 5 Wireshark captures plus stealth mode analysis |
-| Multi-system deployment | 10% | 2 lab machines, capture on the link |
-| Report quality | 15% | IEEE format, all sections, AI documentation |
-| Live demo | 10% | Dashboard plus config switch plus failure demo |
+
+| Criterion                 | Weight | How it is fulfilled                             |
+| ------------------------- | ------ | ----------------------------------------------- |
+| System completeness       | 25%    | All 15 containers run with `docker-compose up`  |
+| Configuration flexibility | 15%    | 3 YAML profiles plus runtime changes via API    |
+| Traffic analysis depth    | 25%    | 5 Wireshark captures plus stealth mode analysis |
+| Multi-system deployment   | 10%    | 2 lab machines, capture on the link             |
+| Report quality            | 15%    | IEEE format, all sections, AI documentation     |
+| Live demo                 | 10%    | Dashboard plus config switch plus failure demo  |
+
 
 ---
 
-## Documentation
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): why each container is built the way it is
-- [`docs/WIRESHARK_GUIDE.md`](docs/WIRESHARK_GUIDE.md): exact capture instructions for all 5 analyses
-- [`docs/STEALTH_MODE.md`](docs/STEALTH_MODE.md): traffic obfuscation: theory, implementation, results
-- [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md): the 15-20 minute demo script
-
----
-
-*MIC Final Project · SS2026 · Hochschule Rhein-Waal*

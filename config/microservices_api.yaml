@@ -1,17 +1,12 @@
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  Traffic Profile: MICROSERVICES API GATEWAY                                ║
-# ║  Simulates a Kubernetes-based microservices backend under normal and        ║
-# ║  stress conditions.                                                         ║
-# ║                                                                            ║
-# ║  Real-world use case: REST API gateway fronting a set of microservices     ║
-# ║  (auth, product catalog, checkout, notifications, telemetry).              ║
-# ║                                                                            ║
-# ║  Key insights:                                                             ║
-# ║    • GET-heavy reads vs. POST-heavy writes have very different profiles    ║
-# ║    • Mixed protocol stack: REST/HTTP2 + MQTT for push notifications        ║
-# ║    • Fault injection shows how a single slow service cascades              ║
-# ║    • Adaptive control mimics a circuit-breaker kicking in                  ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# Traffic Profile: MICROSERVICES API GATEWAY
+# Simulates a Kubernetes-based microservices backend under normal and stress conditions.
+# stress conditions.
+# Real-world use case: REST API gateway fronting a set of microservices (auth, product catalog, checkout, notifications, telemetry).
+# Key insights:
+# GET-heavy reads vs. POST-heavy writes have very different profiles
+# Mixed protocol stack: REST/HTTP2 + MQTT for push notifications
+# Fault injection shows how a single slow service cascades
+# Adaptive control mimics a circuit-breaker kicking in
 
 global:
   warmup:   15
@@ -19,7 +14,7 @@ global:
 
 phases:
 
-  # ── Phase 1: Read-Heavy API Traffic ───────────────────────────────────────
+  # Phase 1: Read-Heavy API Traffic
   - name: read_heavy
     duration: 60
     description: >
@@ -51,7 +46,7 @@ phases:
         packet_size: 512
         mode: normal
 
-  # ── Phase 2: Write Spike (Checkout / Event Burst) ──────────────────────────
+  # Phase 2: Write Spike (Checkout / Event Burst)
   - name: write_spike
     duration: 60
     description: >
@@ -87,7 +82,7 @@ phases:
         packet_size: 768
         mode: normal
 
-  # ── Phase 3: Cascading Service Failure ────────────────────────────────────
+  # Phase 3: Cascading Service Failure
   - name: cascading_failure
     duration: 60
     description: >
@@ -122,7 +117,7 @@ phases:
         packet_size: 512
         mode: normal
 
-  # ── Phase 4: Circuit Breaker (Adaptive Control) ────────────────────────────
+  # Phase 4: Circuit Breaker (Adaptive Control)
   - name: circuit_breaker
     duration: 75
     description: >

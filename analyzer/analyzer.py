@@ -163,7 +163,7 @@ def _check_silence():
             _is_silent[proto] = silent_now
 
 
-# ── Capture (tshark subprocess) ─────────────────────────────────────────────
+# Capture (tshark subprocess)
 
 def _tshark_loop():
     cmd = [
@@ -206,7 +206,7 @@ def _tshark_loop_forever():
         time.sleep(2)  # interface may not be up yet on first try, or tshark died
 
 
-# ── Reporting (POST snapshot every ~1s) ─────────────────────────────────────
+# Reporting (POST snapshot every ~1s)
 
 def _report_loop():
     while True:
